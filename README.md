@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-Aequiludium 共享基础库，为量化研究提供基础设施：交易日历、本地 Parquet 存储引擎、并发框架、ClickHouse 数据库驱动。
+Alpha 策略研究基础库，为量化研究提供基础设施：交易日历、本地 Parquet 存储引擎、并发框架、ClickHouse 数据库驱动。
 
 ---
 
