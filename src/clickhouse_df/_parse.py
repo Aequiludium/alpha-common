@@ -36,9 +36,7 @@ def extract_table_names_from_sql(sql_query):
         statement_str = str(statement)  # .lower()
 
         # 将字符串中的特殊语法置空
-        statement_str = re.sub(
-            r"(substring|extract)\s*\(((.|\s)*?)\)", "", statement_str
-        )
+        statement_str = re.sub(r"(substring|extract)\s*\(((.|\s)*?)\)", "", statement_str)
 
         # 查找匹配的表名
         matches = re.findall(table_name_pattern, statement_str, re.IGNORECASE)

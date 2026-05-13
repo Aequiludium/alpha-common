@@ -42,16 +42,12 @@ def to_polars(sql: str, conn: Client | None = None) -> pl.DataFrame:
     conn = conn if conn is not None else _get_default_conn()
     data, columns = conn.execute(sql, columnar=True, with_column_types=True)
     if len(data) < 1:
-        field_types = {
-            name: dtype.map_clickhouse_to_arrow(type_) for name, type_ in columns
-        }
+        field_types = {name: dtype.map_clickhouse_to_arrow(type_) for name, type_ in columns}
         arrays = [pa.array([], type=col_type) for col_type in field_types.values()]
         arrow_table = pa.Table.from_arrays(arrays, schema=pa.schema(field_types))
         return pl.from_arrow(arrow_table)
 
-    field_types = {
-        name: dtype.map_clickhouse_to_arrow(type_) for name, type_ in columns
-    }
+    field_types = {name: dtype.map_clickhouse_to_arrow(type_) for name, type_ in columns}
     arrow_table = pa.Table.from_arrays(
         [
             pa.array(col, type=col_type)

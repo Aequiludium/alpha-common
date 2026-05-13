@@ -82,9 +82,7 @@ def extract_table_names_from_sql(sql_query: str) -> set[str] | list[str]:
     for statement in parsed:
         statement_str = str(statement)
 
-        statement_str = re.sub(
-            r"(substring|extract)\s*\(((.|\s)*?)\)", "", statement_str
-        )
+        statement_str = re.sub(r"(substring|extract)\s*\(((.|\s)*?)\)", "", statement_str)
 
         matches = re.findall(table_name_pattern, statement_str, re.IGNORECASE)
 

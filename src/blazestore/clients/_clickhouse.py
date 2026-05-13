@@ -48,9 +48,7 @@ class ClickHouseClient:
         required_keys = ["user", "password", "urls"]
         missing_keys = [key for key in required_keys if key not in db_setting]
         if missing_keys:
-            raise ConfigError(
-                f"Missing required keys in database config: {missing_keys}"
-            )
+            raise ConfigError(f"Missing required keys in database config: {missing_keys}")
 
         return db_setting
 
@@ -72,9 +70,7 @@ class ClickHouseClient:
             user = urllib.parse.quote_plus(self._config["user"])
             password = urllib.parse.quote_plus(self._config["password"])
 
-            with clickhouse_df.connect(
-                self._config["urls"], user=user, password=password
-            ):
+            with clickhouse_df.connect(self._config["urls"], user=user, password=password):
                 return clickhouse_df.to_polars(query)
         except Exception as e:
             if "connection" in str(e).lower():

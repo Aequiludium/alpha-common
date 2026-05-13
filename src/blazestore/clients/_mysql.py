@@ -46,9 +46,7 @@ class MySQLClient:
         required_keys = ["user", "password", "url"]
         missing_keys = [key for key in required_keys if key not in db_setting]
         if missing_keys:
-            raise ConfigError(
-                f"Missing required keys in database config: {missing_keys}"
-            )
+            raise ConfigError(f"Missing required keys in database config: {missing_keys}")
 
         user = urllib.parse.quote_plus(db_setting["user"])
         password = urllib.parse.quote_plus(db_setting["password"])
@@ -101,6 +99,4 @@ class MySQLClient:
         except Exception as e:
             if "connection" in str(e).lower():
                 raise ConnectionError(f"Failed to connect to MySQL: {e}", e) from e
-            raise WriteError(
-                f"Failed to write to MySQL table {table_name}: {e}", e
-            ) from e
+            raise WriteError(f"Failed to write to MySQL table {table_name}: {e}", e) from e

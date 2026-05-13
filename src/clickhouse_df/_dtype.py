@@ -171,8 +171,7 @@ def infer_dtype_from_database_typename(
     elif value.startswith("FLOAT") or ("DOUBLE" in value) or (value == "REAL"):
         dtype = (
             Float32
-            if value == "FLOAT4"
-            or (value.endswith(("16", "32")) or (modifier in ("16", "32")))
+            if value == "FLOAT4" or (value.endswith(("16", "32")) or (modifier in ("16", "32")))
             else Float64
         )
 
@@ -198,11 +197,7 @@ def infer_dtype_from_database_typename(
         sz = modifier if (not sz and modifier) else sz
         if not isinstance(sz, int):
             sz = int(sz) if isinstance(sz, str) and sz.isdigit() else None
-        if (
-            ("U" in value and "MEDIUM" not in value)
-            or ("UNSIGNED" in value)
-            or value == "ROWID"
-        ):
+        if ("U" in value and "MEDIUM" not in value) or ("UNSIGNED" in value) or value == "ROWID":
             dtype = integer_dtype_from_nbits(sz, unsigned=True, default=UInt64)
         else:
             dtype = integer_dtype_from_nbits(sz, unsigned=False, default=Int64)

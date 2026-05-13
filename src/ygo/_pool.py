@@ -252,9 +252,7 @@ class Pool:
         if job_num == 0:
             return []
         if job_num < self._n_jobs:
-            logger.warning(
-                f"N_JOBS floating out: use max job num {job_num} under {self._n_jobs}"
-            )
+            logger.warning(f"N_JOBS floating out: use max job num {job_num} under {self._n_jobs}")
 
         res = multi_task_name(
             self._job_map,

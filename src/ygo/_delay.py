@@ -36,9 +36,7 @@ class DelayedFunction:
         6
     """
 
-    def __init__(
-        self, func: Callable[..., Any], stored_kwargs: dict[str, Any] | None = None
-    ):
+    def __init__(self, func: Callable[..., Any], stored_kwargs: dict[str, Any] | None = None):
         if isinstance(func, DelayedFunction):
             self.func = func.func
             self._fn_params_k = func._fn_params_k

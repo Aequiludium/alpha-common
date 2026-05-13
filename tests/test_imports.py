@@ -19,6 +19,7 @@ def test_import_clickhouse_df():
 
 def test_xcals_today():
     import xcals
+
     today = xcals.today()
     assert isinstance(today, str)
     assert len(today) == 10  # YYYY-MM-DD format

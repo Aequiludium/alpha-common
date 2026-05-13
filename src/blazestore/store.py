@@ -228,10 +228,7 @@ class ParquetStore:
             "name": tb_name,
             "type": "partitioned" if is_partitioned else "simple",
             "columns": list(df.columns),
-            "dtypes": {
-                col: str(dtype)
-                for col, dtype in zip(df.columns, df.dtypes, strict=True)
-            },
+            "dtypes": {col: str(dtype) for col, dtype in zip(df.columns, df.dtypes, strict=True)},
             "rows": len(df),
             "partitions": partitions,
             "created_at": datetime.fromtimestamp(tbpath.stat().st_ctime).isoformat(),
@@ -353,9 +350,7 @@ class ParquetStore:
         except Exception as e:
             if isinstance(e, PathError):
                 raise
-            raise FileOperationError(
-                f"Failed to optimize table {tb_name}: {e}", e
-            ) from e
+            raise FileOperationError(f"Failed to optimize table {tb_name}: {e}", e) from e
 
     def check_table(self, tb_name: str) -> bool:
         """

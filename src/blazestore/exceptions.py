@@ -12,9 +12,7 @@ class BlazeStoreError(Exception):
     所有BlazeStore异常的基类，提供统一的错误处理接口。
     """
 
-    def __init__(
-        self, message: str, original_exception: Exception | None = None
-    ) -> None:
+    def __init__(self, message: str, original_exception: Exception | None = None) -> None:
         """
         初始化异常。
 
