@@ -8,10 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-class WarnException(Exception):
-    """
-    Custom exception class for warnings.
-    """
+class WarnError(Exception):
+    """Custom exception class for warnings."""
 
     def __init__(self, message: str):
         super().__init__(message)
