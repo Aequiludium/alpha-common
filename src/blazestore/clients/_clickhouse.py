@@ -76,3 +76,17 @@ class ClickHouseClient:
             if "connection" in str(e).lower():
                 raise ConnectionError(f"Failed to connect to ClickHouse: {e}", e) from e
             raise QueryError(f"Failed to execute ClickHouse query: {e}", e) from e
+
+    def download(self, query: str, path: str):
+        """
+        通过 clickhouse-client 将查询结果直接写入文件。
+
+        Args:
+            query: SQL 查询语句。
+            path: 输出文件路径。
+
+        Raises:
+            ValueError: SQL 末尾包含分号时抛出。
+        """
+        settings = self._config
+        clickhouse_df.raw_download(query, path, settings)

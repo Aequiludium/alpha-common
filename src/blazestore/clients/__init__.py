@@ -10,6 +10,7 @@ from ._mysql import MySQLClient
 __all__ = [
     "MySQLClient",
     "ClickHouseClient",
+    "download_ck",
     "read_mysql",
     "read_ck",
     "write_mysql",
@@ -103,3 +104,19 @@ def read_ck(query: str, db_conf: str = "databases.ck"):
     """
     client = ClickHouseClient(db_conf)
     return client.read(query)
+
+
+def download_ck(query: str, path: str, db_conf: str = "databases.ck"):
+    """
+    通过 clickhouse-client 将查询结果直接写入文件。
+
+    Args:
+        query: SQL 查询语句。
+        path: 输出文件路径。
+        db_conf: 设置中的配置键（例如 "databases.ck"）。
+
+    Raises:
+        ValueError: SQL 末尾包含分号时抛出。
+    """
+    client = ClickHouseClient(db_conf)
+    client.download(query, path)
