@@ -21,6 +21,7 @@ from ._facade import (
     tb_path,
 )
 from .clients import (
+    download_ck,
     read_ck,
     read_mysql,
     write_mysql,
@@ -29,15 +30,16 @@ from .config import get_settings
 from .store import ParquetStore
 
 __all__ = [
-    "read_ck",
-    "read_mysql",
-    "write_mysql",
-    "ParquetStore",
+    "download_ck",
     "get_settings",
-    "sql",
     "has",
     "list_tables",
+    "ParquetStore",
     "put",
     "read",
+    "read_ck",
+    "read_mysql",
+    "sql",
     "tb_path",
+    "write_mysql",
 ]
