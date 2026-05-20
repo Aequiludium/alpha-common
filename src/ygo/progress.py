@@ -12,7 +12,6 @@ from rich.progress import (
     Progress,
     SpinnerColumn,
     TaskID,
-    TaskProgressColumn,
     TextColumn,
     TimeElapsedColumn,
     TimeRemainingColumn,
@@ -33,15 +32,14 @@ class ProgressManager:
                 SpinnerColumn(),
                 TextColumn(
                     "[progress.description]{task.description}",
-                    table_column=Column(width=20),
+                    table_column=Column(width=40),
                 ),
-                BarColumn(table_column=Column(width=30)),
+                BarColumn(),
                 MofNCompleteColumn(table_column=Column(width=10)),
-                TaskProgressColumn(table_column=Column(width=8)),
                 TimeElapsedColumn(table_column=Column(width=10)),
                 TimeRemainingColumn(table_column=Column(width=10)),
                 console=self._console,
-                expand=False,
+                expand=True,
             )
             self._progress.__enter__()
 
@@ -55,15 +53,27 @@ class ProgressManager:
         self._task_map[name] = task_id
         return task_id
 
+    def _remove_task(self, task_id: TaskID):
+        """移除进度条并清理映射。"""
+        self._progress.remove_task(task_id)
+        for name, tid in list(self._task_map.items()):
+            if tid == task_id:
+                del self._task_map[name]
+
     def update(self, task_id: TaskID | None, advance: int = 1):
         if not self.show_progress or task_id is None or self._progress is None:
             return
         self._progress.update(task_id, advance=advance)
+        task = self._progress.tasks[task_id]
+        if task.completed >= task.total:
+            self._remove_task(task_id)
 
     def complete(self, task_id: TaskID | None):
         if not self.show_progress or task_id is None or self._progress is None:
             return
-        self._progress.update(task_id, completed=self._progress.tasks[task_id].total)
+        task = self._progress.tasks[task_id]
+        self._progress.update(task_id, completed=task.total)
+        self._remove_task(task_id)
 
     def __enter__(self):
         self._init_progress()
