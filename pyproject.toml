@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alpha-common"
-version = "0.1.5"
+version = "0.1.6"
 description = "Alpha 策略研究基础库：交易日历、存储引擎、并发框架、ClickHouse 驱动"
 readme = "README.md"
 requires-python = ">=3.11"
