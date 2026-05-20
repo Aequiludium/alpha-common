@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alpha-common"
-version = "0.1.3"
+version = "0.1.4"
 description = "Alpha 策略研究基础库：交易日历、存储引擎、并发框架、ClickHouse 驱动"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -26,6 +26,7 @@ dependencies = [
     "pandas>=3.0.0",
     "joblib>=1.3.0",
     "rich>=14.3.3",
+    "connectorx>=0.4.5",
 ]
 
 [tool.setuptools.packages.find]
@@ -47,7 +48,4 @@ ignore = ["E501", "N802", "N803", "N806"]
 testpaths = ["tests"]
 
 [dependency-groups]
-dev = [
-    "pytest>=9.0.3",
-    "ruff>=0.15.12",
-]
+dev = ["pytest>=9.0.3", "ruff>=0.15.12"]
