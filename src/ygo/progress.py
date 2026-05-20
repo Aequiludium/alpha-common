@@ -34,12 +34,12 @@ class ProgressManager:
                     "[progress.description]{task.description}",
                     table_column=Column(width=40),
                 ),
-                BarColumn(),
+                BarColumn(table_column=Column(width=30)),
                 MofNCompleteColumn(table_column=Column(width=10)),
                 TimeElapsedColumn(table_column=Column(width=10)),
                 TimeRemainingColumn(table_column=Column(width=10)),
                 console=self._console,
-                expand=True,
+                expand=False,
             )
             self._progress.__enter__()
 
