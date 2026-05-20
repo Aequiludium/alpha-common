@@ -19,7 +19,7 @@ from .progress import ProgressManager
 T = TypeVar("T")
 
 
-def run_job(job: DelayedFunction, task_name: str) -> tuple[str, Any]:
+def run_job(job: DelayedFunction, task_name: str) -> tuple[str, Any, bool]:
     """
     执行单个延迟任务。
 
@@ -28,23 +28,20 @@ def run_job(job: DelayedFunction, task_name: str) -> tuple[str, Any]:
         task_name: 任务组名称
 
     Returns:
-        包含任务名称和结果的元组
-
-    Raises:
-        Exception: 如果任务执行失败
+        包含任务名称、结果和是否出错的元组
 
     Examples:
         >>> from ygo import delay
         >>> job = delay(lambda x: x * 2)(x=5)
         >>> result = run_job(job, "test_task")
         >>> result
-        ('test_task', 10)
+        ('test_task', 10, False)
     """
     try:
-        return task_name, job()
+        return task_name, job(), False
     except Exception as e:
         logger.error(f"Failed to run job: {task_name}-{job}:{job.stored_kwargs}\n{e}")
-        return task_name, None
+        return task_name, None, True
 
 
 def multi_task_name(
@@ -92,8 +89,11 @@ def multi_task_name(
                     job_lst.append(delayed(run_job)(job=job, task_name=name))
 
             results: dict[str, list[Any]] = {}
-            for name, result in _parallel(job_lst):
-                progress_mgr.update(progress_mgr._task_map.get(name))
+            for name, result, is_error in _parallel(job_lst):
+                tid = progress_mgr._task_map.get(name)
+                if is_error:
+                    progress_mgr.mark_failure(tid)
+                progress_mgr.update(tid)
                 if results.get(name) is None:
                     results[name] = [result]
                 else:
@@ -105,7 +105,7 @@ def multi_task_name(
                 job_lst.append(delayed(run_job)(job=job, task_name=name))
 
         results: dict[str, list[Any]] = {}
-        for name, result in _parallel(job_lst):
+        for name, result, _ in _parallel(job_lst):
             if results.get(name) is None:
                 results[name] = [result]
             else:
