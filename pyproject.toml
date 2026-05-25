@@ -17,7 +17,7 @@ classifiers = [
 ]
 keywords = ["quantitative", "trading", "clickhouse", "calendar", "finance"]
 dependencies = [
-    "polars>=1.39.2",
+    "polars>=1.41.0",
     "dynaconf>=3.2.13",
     "loguru>=0.7.0",
     "sqlparse>=0.5.5",
