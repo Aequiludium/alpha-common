@@ -52,7 +52,11 @@ xcals.get_last_tradingday("2024-01-01")
 
 # 报告期计算（获取前 2 个季报截止日）
 xcals.get_previous_report_dates("2024-10-15", n=2)
-# -> ['2024-06-30', '2024-03-31']
+# -> ['2024-06-30', '2024-09-30']
+
+# n=1 时返回单个报告期
+xcals.get_previous_report_dates("2024-10-15", n=1)
+# -> '2024-09-30'
 
 # 更新交易日数据（从远程下载最新日历）
 xcals.update()
