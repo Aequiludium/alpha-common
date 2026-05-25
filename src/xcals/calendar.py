@@ -211,7 +211,7 @@ def get_previous_report_dates(
     season: int = None,
     to_str: bool = True,
     if_safe: bool = False,
-) -> list[str] | list[datetime.date]:
+) -> str | datetime.date | list[str] | list[datetime.date]:
     """
     获取指定日期之前的 n 个报告期。
 
@@ -221,10 +221,14 @@ def get_previous_report_dates(
         season: 季度 (1, 2, 3, 4) 或 None。
                None 表示连续报告期。
                1-4 表示只获取对应季度的报告期 (如 season=1 只获取 3月31日)。
-        to_str: 是否返回字符串列表
+        to_str: 是否返回字符串结果。True 返回 str 或 list[str]，
+                False 返回 datetime.date 或 list[datetime.date]
         if_safe: 是否只返回已过法定披露截止日的报告期。
                  True 表示强制要求返回的报告日期在上一个截止日之前。
                  False 表示不检查披露截止日。
+
+    Returns:
+        n=1 时返回单个报告期；n>1 时按时间升序返回报告期列表。
     """
     if isinstance(date, str):
         d = datetime.datetime.strptime(date, "%Y-%m-%d").date()
@@ -322,7 +326,11 @@ def get_previous_report_dates(
     result.reverse()
 
     if to_str:
-        return [r.strftime("%Y-%m-%d") for r in result]
+        result = [r.strftime("%Y-%m-%d") for r in result]
+
+    if len(result) == 1:
+        return result[0]
+
     return result
 
 
