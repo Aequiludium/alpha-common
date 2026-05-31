@@ -43,7 +43,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=3.0.0" },
     { name = "polars", specifier = ">=1.41.0" },
     { name = "pyarrow", specifier = ">=23.0.0" },
-    { name = "rich", specifier = ">=14.3.3" },
+    { name = "rich", specifier = ">=15.0.0" },
     { name = "sqlparse", specifier = ">=0.5.5" },
 ]
 
