@@ -19,5 +19,5 @@ REQUIRED_SCHEMA: dict[str, pl.DataType] = {
 }
 
 FILE_PATH = Path.home() / ".xcals"
-FILE_URL = "https://raw.githubusercontent.com/link-yundi/xcals/refs/heads/main/.xcals"
+FILE_URL = "https://raw.githubusercontent.com/Aequiludium/alpha-common/main/src/xcals/.xcals"
 PACKAGE_XCALS = Path(importlib.resources.files("xcals").joinpath(".xcals"))
