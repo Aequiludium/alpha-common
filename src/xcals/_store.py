@@ -1,230 +1,178 @@
-"""交易日历存储模块（内部实现）
-
-提供交易日数据的本地存储和查询功能。
-"""
+"""交易日历存储模块（内部实现）"""
 
 from __future__ import annotations
 
 import bisect
-import importlib.resources
-import os
 import shutil
+import tempfile
+import uuid
+from pathlib import Path
 
 import polars as pl
 
-USERHOME = os.path.expanduser("~")
-FILE_PATH = os.path.join(USERHOME, ".xcals")
-FILE_URL = "https://raw.githubusercontent.com/link-yundi/xcals/refs/heads/main/.xcals"
-PACKAGE_XCALS = importlib.resources.files("xcals").joinpath(".xcals")
+from . import _constants, _io
 
 
 class Calendar:
-    """
-    A singleton class for managing trading calendar data.
-    """
+    """A singleton class for managing trading calendar data."""
 
     _instance = None
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
         return cls._instance
 
     def __init__(self):
-        if self._initialized:
+        """Construct the singleton.  No I/O — data loads lazily on first use."""
+        if getattr(self, "_ready", False):
             return
-        self._df: pl.DataFrame | None = None
-        self._dates_list: list[str] = []
-        self._dates_set: set[str] = set()
-        self._initialized = True
+        self._ready = False
+
+    # -- internal helpers ----------------------------------------------------
 
     def _ensure_loaded(self) -> None:
-        """
-        Ensures that the calendar data is loaded from the file.
-        """
-        if self._df is not None:
+        """Lazy-load calendar data on first access."""
+        if self._ready:
             return
+        self.reload()
 
-        if not os.path.exists(FILE_PATH):
-            # 从包内复制到用户目录
-            os.makedirs(os.path.dirname(FILE_PATH), exist_ok=True)
-            shutil.copy(PACKAGE_XCALS, FILE_PATH)
-
-        if not os.path.exists(FILE_PATH):
-            raise FileNotFoundError(f"Calendar file not found at {FILE_PATH}")
-
-        self._df = (
-            pl.read_csv(
-                FILE_PATH,
-                has_header=False,
-                new_columns=["date"],
+    def _rebuild_indexes(self) -> None:
+        """Rebuild the trading-day list and set from ``self._table``."""
+        trading_days = (
+            self._table.filter(pl.col(_constants.TRADING_DAY_COLUMN) == 1)
+            .select(
+                pl.col(_constants.DATE_COLUMN).dt.strftime("%Y-%m-%d").alias(_constants.DATE_COLUMN)
             )
-            .with_columns(pl.col("date").str.to_date("%Y-%m-%d").alias("Date"))
-            .sort("date")
+            .get_column(_constants.DATE_COLUMN)
+            .to_list()
         )
-        # Pre-compute Python structures for faster lookup
-        self._dates_list = self._df["date"].to_list()
-        self._dates_set = set(self._dates_list)
+        # Assign list first, then set — both are built from the SAME local
+        # ``trading_days`` so the inconsistency window is bounded to the
+        # set-construction call below.
+        self._trading_days = trading_days
+        self._trading_day_set = set(trading_days)
+
+    def reload(self) -> None:
+        """Force-reload the parquet table and rebuild cached indexes."""
+        self._table = _io.read_calendar_table()
+        self._rebuild_indexes()
+        self._ready = True
 
     def update(self) -> None:
-        """
-        Downloads the latest calendar file from the remote URL.
-        """
-        import urllib.request
-
+        """Download the latest calendar, validate it, atomically replace."""
+        tmp = Path(tempfile.mktemp())
         try:
-            print(f"Downloading calendar from {FILE_URL} to {FILE_PATH}...")
-            # Create directory if not exists
-            os.makedirs(os.path.dirname(FILE_PATH), exist_ok=True)
-            urllib.request.urlretrieve(FILE_URL, FILE_PATH)
+            print(f"Downloading calendar from {_constants.FILE_URL} to {_constants.FILE_PATH}...")
+            _io.download_calendar_table(tmp)
+
+            # Validate BEFORE replacing the live file.
+            _io.validate_schema(pl.read_parquet(tmp))
             print("Download completed.")
-            # Reload data if it was already loaded
-            if self._initialized and self._df is not None:
-                self._df = None
-                self._ensure_loaded()
-        except Exception as e:
-            print(f"Failed to download calendar: {e}")
+
+            _constants.FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(tmp), str(_constants.FILE_PATH))
+            self.reload()
+        except Exception:
+            print("Failed to update calendar.")
+            if tmp.exists():
+                tmp.unlink()
             raise
+
+    # -- public query API ----------------------------------------------------
 
     def get_tradingdays(
         self,
         beg_date: str | None = None,
         end_date: str | None = None,
     ) -> pl.DataFrame:
-        """
-        Get trading days within a range.
-
-        Args:
-            beg_date: Start date (inclusive).
-            end_date: End date (inclusive).
-
-        Returns:
-            DataFrame with 'date' column.
-        """
+        """Get trading days within a range."""
         self._ensure_loaded()
-        result = self._df
+        result = self._table.filter(pl.col(_constants.TRADING_DAY_COLUMN) == 1)
         if beg_date is not None:
-            result = result.filter(pl.col("date") >= beg_date)
+            result = result.filter(pl.col(_constants.DATE_COLUMN) >= pl.lit(beg_date).str.to_date())
         if end_date is not None:
-            result = result.filter(pl.col("date") <= end_date)
-
-        return result.select(pl.col("Date").alias("date"))
+            result = result.filter(pl.col(_constants.DATE_COLUMN) <= pl.lit(end_date).str.to_date())
+        return result.select(_constants.DATE_COLUMN)
 
     def get_tradingdays_lag(self, date: str, num: int) -> pl.DataFrame:
-        """
-        Get the last 'num' trading days up to 'date'.
-
-        Args:
-            date: The end date.
-            num: Number of trading days to retrieve.
-
-        Returns:
-            DataFrame containing the last 'num' trading days.
-        """
+        """Get the last ``num`` trading days up to ``date``."""
         self._ensure_loaded()
-        return self._df.filter(pl.col("date") <= date).tail(abs(num))
+        result = self._table.filter(
+            (pl.col(_constants.TRADING_DAY_COLUMN) == 1)
+            & (pl.col(_constants.DATE_COLUMN) <= pl.lit(date).str.to_date())
+        )
+        return result.select(_constants.DATE_COLUMN).tail(abs(num))
 
     def get_recent_tradeday(self, date: str) -> str:
-        """
-        Get the most recent trading day on or before 'date'.
-
-        Args:
-            date: The reference date.
-
-        Returns:
-            The most recent trading day.
-
-        Raises:
-            ValueError: If no trading day is found before or on 'date'.
-        """
+        """Get the most recent trading day on or before ``date``."""
         self._ensure_loaded()
-        # Find the first date strictly greater than 'date'
-        idx = bisect.bisect_right(self._dates_list, date)
+        idx = bisect.bisect_right(self._trading_days, date)
         if idx == 0:
             raise ValueError(f"No trading day found before or on {date}")
-        # The element before it is <= date
-        return self._dates_list[idx - 1]
+        return self._trading_days[idx - 1]
 
     def shift_tradeday(self, date: str, num: int = 1) -> str:
-        """
-        Shift a date by 'num' trading days.
-
-        Strategy for non-trading days:
-        - If num > 0: Start from the *next* trading day.
-        - If num < 0: Start from the *previous* trading day.
-
-        Args:
-            date: Base date.
-            num: Number of trading days to shift.
-
-        Returns:
-            Shifted date.
-
-        Raises:
-            IndexError: If the shifted date is out of range.
-        """
+        """Shift a date by ``num`` trading days."""
+        self._ensure_loaded()
         if num == 0:
             return date
 
-        self._ensure_loaded()
-
         if num > 0:
-            # Shift Forward
-            # bisect_left returns first index >= date.
-            # If date is trading day: returns its index.
-            # If date is non-trading: returns index of Next trading day.
-            # We add num to this index.
-            idx = bisect.bisect_left(self._dates_list, date)
+            idx = bisect.bisect_left(self._trading_days, date)
             target_idx = idx + num
         else:
-            # Shift Backward
-            # bisect_right returns first index > date.
-            # If date is trading day (i): returns i+1.
-            #   target = i+1 + num - 1 = i + num. (Correct)
-            # If date is non-trading (between i and i+1): returns i+1 (Next).
-            #   target = i+1 + num - 1 = i + num.
-            #   Since 'i' is the Previous trading day, this effectively calculates:
-            #   Prev_Index + num.
-            idx = bisect.bisect_right(self._dates_list, date)
+            idx = bisect.bisect_right(self._trading_days, date)
             target_idx = idx + num - 1
 
-        if 0 <= target_idx < len(self._dates_list):
-            return self._dates_list[target_idx]
-        else:
-            raise IndexError(f"Shifted date out of range: {date} + {num}")
+        if 0 <= target_idx < len(self._trading_days):
+            return self._trading_days[target_idx]
+        raise IndexError(f"Shifted date out of range: {date} + {num}")
 
     def is_tradeday(self, date: str) -> bool:
-        """
-        Check if a date is a trading day.
-
-        Args:
-            date: Date string in YYYY-MM-DD format.
-
-        Returns:
-            True if it is a trading day, False otherwise.
-        """
+        """Check whether ``date`` is a trading day."""
         self._ensure_loaded()
-        return date in self._dates_set
+        return date in self._trading_day_set
 
     def is_reportdate(self, date: str) -> bool:
-        """
-        Check if a date is a standard financial report date (quarterly).
-
-        Args:
-            date: Date string in YYYY-MM-DD format.
-
-        Returns:
-            True if it is a report date (03-31, 06-30, 09-30, 12-31), False otherwise.
-        """
+        """Check whether ``date`` is a standard quarterly report date."""
         try:
-            _, m, d = map(int, date.split("-"))
-            if m in [6, 9]:
-                if d == 30:
-                    return True
-            if m in [3, 12]:
-                if d == 31:
-                    return True
-            return False
+            _, month, day = map(int, date.split("-"))
         except ValueError:
             return False
+
+        if month in [6, 9]:
+            return day == 30
+        if month in [3, 12]:
+            return day == 31
+        return False
+
+    def align_trade_date(
+        self,
+        df: pl.DataFrame,
+        date_col: str = _constants.DATE_COLUMN,
+        method: str = "backward",
+        trade_date_col: str = "trade_date",
+    ) -> pl.DataFrame:
+        """Align natural dates to nearest trading dates via asof join."""
+        self._ensure_loaded()
+        trade_dates = (
+            self._table.filter(pl.col(_constants.TRADING_DAY_COLUMN) == 1)
+            .select(pl.col(_constants.DATE_COLUMN).alias(trade_date_col))
+            .sort(trade_date_col)
+        )
+
+        row_idx_col = f"_xcals_row_idx_{uuid.uuid4().hex}"
+
+        return (
+            df.with_row_index(row_idx_col)
+            .sort(date_col)
+            .join_asof(
+                trade_dates,
+                left_on=date_col,
+                right_on=trade_date_col,
+                strategy=method,
+            )
+            .sort(row_idx_col)
+            .drop(row_idx_col)
+        )
