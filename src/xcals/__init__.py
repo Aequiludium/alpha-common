@@ -1,5 +1,6 @@
 from .calendar import (
     CALENDAR,
+    align_trade_date,
     generate_time_list,
     get_last_tradingday,
     get_previous_report_dates,
@@ -23,6 +24,7 @@ __all__ = [
     "shift_tradeday",
     "is_tradeday",
     "CALENDAR",
+    "align_trade_date",
     "to_date",
     "to_datetime",
     "to_time",

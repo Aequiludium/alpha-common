@@ -205,6 +205,38 @@ def update() -> None:
     CALENDAR.update()
 
 
+def align_trade_date(
+    df: pl.DataFrame,
+    date_col: str = "date",
+    method: Literal["backward", "forward"] = "backward",
+    trade_date_col: str = "trade_date",
+) -> pl.DataFrame:
+    """
+    对自然日 DataFrame 对齐最近交易日。
+
+    Args:
+        df: 输入 DataFrame。
+        date_col: 自然日期列名，必须为 pl.Date。
+        method: 对齐方向，"backward" 为前向填充到最近过去交易日，
+                "forward" 为后向填充到最近未来交易日。
+        trade_date_col: 输出交易日列名。
+
+    Returns:
+        新的 DataFrame，追加交易日列，类型为 pl.Date。
+    """
+    if date_col not in df.columns:
+        raise ValueError(f"Column not found: {date_col}")
+    if df.schema[date_col] != pl.Date:
+        raise TypeError(f"Column {date_col!r} must be pl.Date, got {df.schema[date_col]}")
+    if method not in {"backward", "forward"}:
+        raise ValueError(f"Unsupported method: {method}")
+    if trade_date_col in df.columns and trade_date_col != date_col:
+        raise ValueError(f"Column already exists: {trade_date_col}")
+    return CALENDAR.align_trade_date(
+        df, date_col=date_col, method=method, trade_date_col=trade_date_col
+    )
+
+
 def get_previous_report_dates(
     date: str | datetime.date,
     n: int = 1,
