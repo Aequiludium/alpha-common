@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import datetime
 from typing import Literal, overload
+from zoneinfo import ZoneInfo
 
 import polars as pl
 
 from ._store import Calendar
+
+SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 
 # --- Polars Expression Generators ---
 
@@ -117,7 +120,7 @@ def today(as_obj: bool = False) -> str | datetime.date:
         >>> today(as_obj=True)
         datetime.date(2023, 12, 1)
     """
-    now_dt = datetime.datetime.now()
+    now_dt = datetime.datetime.now(tz=SHANGHAI_TZ)
     return now_dt.date() if as_obj else now_dt.strftime("%Y-%m-%d")
 
 
@@ -139,7 +142,7 @@ def now(as_obj: bool = False) -> str | datetime.datetime:
     Returns:
         当前时间。
     """
-    dt = datetime.datetime.now()
+    dt = datetime.datetime.now(tz=SHANGHAI_TZ)
     return dt if as_obj else dt.strftime("%Y-%m-%d %H:%M:%S")
 
 

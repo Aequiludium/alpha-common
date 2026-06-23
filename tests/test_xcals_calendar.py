@@ -1,5 +1,6 @@
 import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import polars as pl
 import pytest
@@ -386,3 +387,23 @@ def test_get_previous_report_dates_returns_scalar_for_single_result():
     assert xcals.get_previous_report_dates("2024-10-15", n=1, to_str=False) == datetime.date(
         2024, 9, 30
     )
+
+
+def test_now_and_today_use_shanghai_timezone(monkeypatch):
+    fixed_utc = datetime.datetime(2024, 1, 1, 16, 30, tzinfo=datetime.UTC)
+
+    class FixedDateTime(datetime.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            if tz is None:
+                return fixed_utc.replace(tzinfo=None)
+            return fixed_utc.astimezone(tz)
+
+    monkeypatch.setattr(xcals.calendar.datetime, "datetime", FixedDateTime)
+
+    assert xcals.now() == "2024-01-02 00:30:00"
+    assert xcals.today() == "2024-01-02"
+
+    now_obj = xcals.now(as_obj=True)
+    assert now_obj == fixed_utc.astimezone(ZoneInfo("Asia/Shanghai"))
+    assert now_obj.tzinfo == ZoneInfo("Asia/Shanghai")
