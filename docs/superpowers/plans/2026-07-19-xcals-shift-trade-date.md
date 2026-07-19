@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a vectorized `xcals.shift_trade_date` API that appends a fixed trading-day shift of a Polars `Date` column.
+**Goal:** Add a vectorized `xcals.shift_trade_date` API, upgrade Polars to 1.42.1, and publish alpha-common 0.1.11 through CI.
 
 **Architecture:** The public wrapper validates DataFrame arguments and delegates to the singleton `Calendar`. The calendar implementation builds a trading-date-to-shifted-date mapping with Polars `shift(-num)`, applies a direction-dependent as-of join, and restores original row order.
 
@@ -17,6 +17,8 @@
 - Modify `src/xcals/__init__.py`: export the new public function.
 - Modify `tests/test_xcals_calendar.py`: cover semantics, validation, nulls, range, and ordering.
 - Modify `tests/test_imports.py`: verify the top-level public export.
+- Modify `pyproject.toml`: require Polars 1.42.1 and set package version 0.1.11.
+- Modify `uv.lock`: lock Polars 1.42.1 and alpha-common 0.1.11 metadata.
 
 ### Task 1: Define Public Behavior with Failing Tests
 
@@ -84,7 +86,10 @@ def test_shift_trade_date_returns_null_outside_calendar(tmp_path, monkeypatch):
         {"date": [datetime.date(2024, 1, 1), datetime.date(2024, 1, 8)]}
     )
 
-    assert calendar.shift_trade_date(df, num=-1)["trade_date"].to_list() == [None, None]
+    assert calendar.shift_trade_date(df, num=-1)["trade_date"].to_list() == [
+        None,
+        datetime.date(2024, 1, 5),
+    ]
     assert calendar.shift_trade_date(df, num=1)["trade_date"].to_list() == [
         datetime.date(2024, 1, 3),
         None,
@@ -255,7 +260,54 @@ git add src/xcals/calendar.py src/xcals/__init__.py
 git commit -m "feat(xcals): expose DataFrame trade-date shift"
 ```
 
-### Task 4: Verify the Complete Change
+### Task 4: Upgrade Polars and Prepare Version 0.1.11
+
+**Files:**
+- Modify: `pyproject.toml`
+- Modify: `uv.lock`
+
+- [ ] **Step 1: Update project metadata**
+
+Change these entries in `pyproject.toml`:
+
+```toml
+version = "0.1.11"
+```
+
+```toml
+"polars>=1.42.1",
+```
+
+- [ ] **Step 2: Refresh the lock file**
+
+Run:
+
+```bash
+uv lock --upgrade-package polars
+uv sync
+```
+
+Expected: `uv.lock` records Polars and `polars-runtime-32` 1.42.1, and the
+installed environment reports Polars 1.42.1.
+
+- [ ] **Step 3: Verify the installed dependency**
+
+Run:
+
+```bash
+uv run python -c 'import polars as pl; print(pl.__version__)'
+```
+
+Expected: `1.42.1`.
+
+- [ ] **Step 4: Commit dependency and version metadata**
+
+```bash
+git add pyproject.toml uv.lock
+git commit -m "chore: upgrade polars to 1.42.1 and bump version to 0.1.11"
+```
+
+### Task 5: Verify the Complete Change
 
 **Files:**
 - Verify all modified source and test files.
@@ -285,7 +337,47 @@ Expected: both commands exit successfully with no formatting or lint errors.
 
 - [ ] **Step 4: Review the final diff**
 
-Run: `git diff HEAD~3 --check && git status --short`
+Run: `git diff origin/main...HEAD --check && git status --short`
 
-Expected: no whitespace errors; only the pre-existing untracked `AGENTS.md`
-remains outside the feature commits.
+Expected: no whitespace errors and a clean feature worktree.
+
+- [ ] **Step 5: Build the release artifacts**
+
+Run: `uv build`
+
+Expected: wheel and source distribution for alpha-common 0.1.11 are created.
+
+### Task 6: Publish Through GitHub CI
+
+**Files:**
+- No additional local file changes.
+
+- [ ] **Step 1: Push the feature branch**
+
+Run: `git push -u origin codex/xcals-shift-trade-date`
+
+Expected: the remote branch is created at the verified local HEAD.
+
+- [ ] **Step 2: Open and merge a PR after CI passes**
+
+Create a PR targeting `main` with the feature, tests, Polars upgrade, version,
+and verification results. Wait for all required checks, then merge the PR.
+
+Expected: the PR is merged and `origin/main` contains the feature commits.
+
+- [ ] **Step 3: Create GitHub Release v0.1.11**
+
+Create a non-draft GitHub Release tagged `v0.1.11` from the merged `main`.
+
+Expected: `.github/workflows/publish.yml` starts from the `release.published`
+event.
+
+- [ ] **Step 4: Wait for CI publishing and verify PyPI**
+
+Wait for the publish workflow to complete successfully, then query:
+
+```bash
+curl -fsSL https://pypi.org/pypi/alpha-common/0.1.11/json
+```
+
+Expected: HTTP success and package metadata for alpha-common 0.1.11.
