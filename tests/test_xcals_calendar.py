@@ -114,6 +114,7 @@ def test_calendar_initializes_from_packaged_data(tmp_path, monkeypatch):
     monkeypatch.setattr(_constants, "FILE_PATH", local_file)
 
     calendar = _store.Calendar()
+    monkeypatch.setattr(xcals.calendar, "CALENDAR", calendar)
     # Lazy load triggers copy from package → local
     assert calendar.is_tradeday("2024-01-02") is True
     assert local_file.exists()
@@ -203,6 +204,85 @@ def test_tradingday_api_preserves_existing_semantics(tmp_path, monkeypatch):
     assert xcals.shift_tradeday("2024-01-04", 1) == "2024-01-08"
     assert xcals.shift_tradeday("2024-01-04", -1) == "2024-01-02"
     assert xcals.shift_tradeday("2024-01-04", 0) == "2024-01-04"
+
+
+def test_shift_trade_date_supports_positive_negative_and_zero(tmp_path, monkeypatch):
+    package_file = tmp_path / ".xcals"
+    local_file = tmp_path / "home" / ".xcals"
+    _write_calendar(package_file, _sample_calendar_rows())
+    monkeypatch.setattr(_constants, "PACKAGE_XCALS", package_file)
+    monkeypatch.setattr(_constants, "FILE_PATH", local_file)
+
+    calendar = _store.Calendar()
+    df = pl.DataFrame(
+        {
+            "date": [
+                datetime.date(2024, 1, 5),
+                datetime.date(2024, 1, 2),
+                datetime.date(2024, 1, 4),
+                None,
+            ],
+            "value": [1, 2, 3, 4],
+        },
+        schema={"date": pl.Date, "value": pl.Int64},
+    )
+
+    forward = xcals.shift_trade_date(df, num=1, trade_date_col="forward_date")
+    backward = calendar.shift_trade_date(df, num=-1, trade_date_col="backward_date")
+    unchanged = calendar.shift_trade_date(df, num=0, trade_date_col="same_date")
+
+    assert forward["forward_date"].to_list() == [
+        datetime.date(2024, 1, 8),
+        datetime.date(2024, 1, 3),
+        datetime.date(2024, 1, 8),
+        None,
+    ]
+    assert backward["backward_date"].to_list() == [
+        datetime.date(2024, 1, 3),
+        None,
+        datetime.date(2024, 1, 2),
+        None,
+    ]
+    assert unchanged["same_date"].to_list() == df["date"].to_list()
+    assert forward["value"].to_list() == [1, 2, 3, 4]
+    assert forward["date"].to_list() == df["date"].to_list()
+
+
+def test_shift_trade_date_returns_null_outside_calendar(tmp_path, monkeypatch):
+    package_file = tmp_path / ".xcals"
+    local_file = tmp_path / "home" / ".xcals"
+    _write_calendar(package_file, _sample_calendar_rows())
+    monkeypatch.setattr(_constants, "PACKAGE_XCALS", package_file)
+    monkeypatch.setattr(_constants, "FILE_PATH", local_file)
+    calendar = _store.Calendar()
+
+    df = pl.DataFrame({"date": [datetime.date(2024, 1, 1), datetime.date(2024, 1, 8)]})
+
+    assert calendar.shift_trade_date(df, num=-1)["trade_date"].to_list() == [
+        None,
+        datetime.date(2024, 1, 5),
+    ]
+    assert calendar.shift_trade_date(df, num=1)["trade_date"].to_list() == [
+        datetime.date(2024, 1, 3),
+        None,
+    ]
+
+
+def test_shift_trade_date_validates_arguments():
+    valid = pl.DataFrame({"date": [datetime.date(2024, 1, 2)]})
+
+    with pytest.raises(ValueError, match="Column not found"):
+        xcals.shift_trade_date(valid, date_col="missing")
+    with pytest.raises(TypeError, match="must be pl.Date"):
+        xcals.shift_trade_date(pl.DataFrame({"date": ["2024-01-02"]}))
+    with pytest.raises(TypeError, match="num must be an integer"):
+        xcals.shift_trade_date(valid, num=1.5)
+    with pytest.raises(TypeError, match="num must be an integer"):
+        xcals.shift_trade_date(valid, num=True)
+    with pytest.raises(ValueError, match="Column already exists"):
+        xcals.shift_trade_date(valid, trade_date_col="date")
+    with pytest.raises(ValueError, match="Column already exists"):
+        xcals.shift_trade_date(valid.with_columns(pl.lit(None, dtype=pl.Date).alias("trade_date")))
 
 
 def test_align_trade_date_supports_backward_and_forward_fill(tmp_path, monkeypatch):

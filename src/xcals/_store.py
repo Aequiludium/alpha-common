@@ -129,6 +129,42 @@ class Calendar:
             return self._trading_days[target_idx]
         raise IndexError(f"Shifted date out of range: {date} + {num}")
 
+    def shift_trade_date(
+        self,
+        df: pl.DataFrame,
+        date_col: str = _constants.DATE_COLUMN,
+        num: int = 1,
+        trade_date_col: str = "trade_date",
+    ) -> pl.DataFrame:
+        """Shift a Date column by a fixed number of trading days."""
+        if num == 0:
+            return df.with_columns(pl.col(date_col).alias(trade_date_col))
+
+        self._ensure_loaded()
+        suffix = uuid.uuid4().hex
+        row_idx_col = f"_xcals_row_idx_{suffix}"
+        anchor_col = f"_xcals_anchor_date_{suffix}"
+        strategy = "forward" if num > 0 else "backward"
+        trade_date_map = (
+            self._table.filter(pl.col(_constants.TRADING_DAY_COLUMN) == 1)
+            .select(pl.col(_constants.DATE_COLUMN).alias(anchor_col))
+            .sort(anchor_col)
+            .with_columns(pl.col(anchor_col).shift(-num).alias(trade_date_col))
+        )
+
+        return (
+            df.with_row_index(row_idx_col)
+            .sort(date_col)
+            .join_asof(
+                trade_date_map,
+                left_on=date_col,
+                right_on=anchor_col,
+                strategy=strategy,
+            )
+            .sort(row_idx_col)
+            .drop(row_idx_col, anchor_col)
+        )
+
     def is_tradeday(self, date: str) -> bool:
         """Check whether ``date`` is a trading day."""
         self._ensure_loaded()
