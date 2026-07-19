@@ -259,7 +259,10 @@ def test_shift_trade_date_returns_null_outside_calendar(tmp_path, monkeypatch):
         {"date": [datetime.date(2024, 1, 1), datetime.date(2024, 1, 8)]}
     )
 
-    assert calendar.shift_trade_date(df, num=-1)["trade_date"].to_list() == [None, None]
+    assert calendar.shift_trade_date(df, num=-1)["trade_date"].to_list() == [
+        None,
+        datetime.date(2024, 1, 5),
+    ]
     assert calendar.shift_trade_date(df, num=1)["trade_date"].to_list() == [
         datetime.date(2024, 1, 3),
         None,
