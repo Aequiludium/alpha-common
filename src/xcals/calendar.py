@@ -172,6 +172,40 @@ def shift_tradeday(date: str, num: int = 1) -> str:
     return CALENDAR.shift_tradeday(date, num)
 
 
+def shift_trade_date(
+    df: pl.DataFrame,
+    date_col: str = "date",
+    num: int = 1,
+    trade_date_col: str = "trade_date",
+) -> pl.DataFrame:
+    """
+    对 Polars Date 列整体偏移固定数量的交易日。
+
+    Args:
+        df: 输入 DataFrame。
+        date_col: 待偏移日期列名，必须为 pl.Date。
+        num: 交易日偏移量。正数向后，负数向前，0 保留原日期。
+        trade_date_col: 新增的结果列名。
+
+    Returns:
+        保留原有行和列、追加偏移交易日列的新 DataFrame。超出日历范围时结果为 null。
+    """
+    if date_col not in df.columns:
+        raise ValueError(f"Column not found: {date_col}")
+    if df.schema[date_col] != pl.Date:
+        raise TypeError(f"Column {date_col!r} must be pl.Date, got {df.schema[date_col]}")
+    if isinstance(num, bool) or not isinstance(num, int):
+        raise TypeError(f"num must be an integer, got {type(num).__name__}")
+    if trade_date_col in df.columns:
+        raise ValueError(f"Column already exists: {trade_date_col}")
+    return CALENDAR.shift_trade_date(
+        df,
+        date_col=date_col,
+        num=num,
+        trade_date_col=trade_date_col,
+    )
+
+
 def is_tradeday(date: str) -> bool:
     """
     判断是否为交易日。
