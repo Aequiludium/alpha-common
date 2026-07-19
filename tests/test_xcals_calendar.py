@@ -255,9 +255,7 @@ def test_shift_trade_date_returns_null_outside_calendar(tmp_path, monkeypatch):
     monkeypatch.setattr(_constants, "FILE_PATH", local_file)
     calendar = _store.Calendar()
 
-    df = pl.DataFrame(
-        {"date": [datetime.date(2024, 1, 1), datetime.date(2024, 1, 8)]}
-    )
+    df = pl.DataFrame({"date": [datetime.date(2024, 1, 1), datetime.date(2024, 1, 8)]})
 
     assert calendar.shift_trade_date(df, num=-1)["trade_date"].to_list() == [
         None,
@@ -283,9 +281,7 @@ def test_shift_trade_date_validates_arguments():
     with pytest.raises(ValueError, match="Column already exists"):
         xcals.shift_trade_date(valid, trade_date_col="date")
     with pytest.raises(ValueError, match="Column already exists"):
-        xcals.shift_trade_date(
-            valid.with_columns(pl.lit(None, dtype=pl.Date).alias("trade_date"))
-        )
+        xcals.shift_trade_date(valid.with_columns(pl.lit(None, dtype=pl.Date).alias("trade_date")))
 
 
 def test_align_trade_date_supports_backward_and_forward_fill(tmp_path, monkeypatch):
