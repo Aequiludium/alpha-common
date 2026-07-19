@@ -114,6 +114,7 @@ def test_calendar_initializes_from_packaged_data(tmp_path, monkeypatch):
     monkeypatch.setattr(_constants, "FILE_PATH", local_file)
 
     calendar = _store.Calendar()
+    monkeypatch.setattr(xcals.calendar, "CALENDAR", calendar)
     # Lazy load triggers copy from package → local
     assert calendar.is_tradeday("2024-01-02") is True
     assert local_file.exists()
@@ -226,7 +227,7 @@ def test_shift_trade_date_supports_positive_negative_and_zero(tmp_path, monkeypa
         schema={"date": pl.Date, "value": pl.Int64},
     )
 
-    forward = calendar.shift_trade_date(df, num=1, trade_date_col="forward_date")
+    forward = xcals.shift_trade_date(df, num=1, trade_date_col="forward_date")
     backward = calendar.shift_trade_date(df, num=-1, trade_date_col="backward_date")
     unchanged = calendar.shift_trade_date(df, num=0, trade_date_col="same_date")
 

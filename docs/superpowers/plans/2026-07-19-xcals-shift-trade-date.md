@@ -26,7 +26,7 @@
 - Modify: `tests/test_xcals_calendar.py`
 - Modify: `tests/test_imports.py`
 
-- [ ] **Step 1: Add behavior and edge-case tests**
+- [x] **Step 1: Add behavior and edge-case tests**
 
 Append tests that reuse `_write_calendar`, `_sample_calendar_rows`, and the
 autouse singleton reset fixture:
@@ -122,7 +122,7 @@ def test_import_xcals():
     from xcals import shift_trade_date  # noqa: F401
 ```
 
-- [ ] **Step 2: Run the new tests and confirm RED**
+- [x] **Step 2: Run the new tests and confirm RED**
 
 Run:
 
@@ -137,7 +137,7 @@ uv run pytest \
 Expected: FAIL because neither `Calendar.shift_trade_date` nor the top-level
 `xcals.shift_trade_date` API exists.
 
-- [ ] **Step 3: Commit the failing tests**
+- [x] **Step 3: Commit the failing tests**
 
 ```bash
 git add tests/test_xcals_calendar.py tests/test_imports.py
@@ -149,7 +149,7 @@ git commit -m "test(xcals): define DataFrame trade-date shift behavior"
 **Files:**
 - Modify: `src/xcals/_store.py`
 
-- [ ] **Step 1: Add `Calendar.shift_trade_date`**
+- [x] **Step 1: Add `Calendar.shift_trade_date`**
 
 Add after `Calendar.shift_tradeday`:
 
@@ -191,7 +191,7 @@ def shift_trade_date(
     )
 ```
 
-- [ ] **Step 2: Run the two storage behavior tests and confirm GREEN**
+- [x] **Step 2: Run the two storage behavior tests and confirm GREEN**
 
 Run:
 
@@ -203,7 +203,7 @@ uv run pytest \
 
 Expected: both selected tests PASS, including the null-key assertion.
 
-- [ ] **Step 3: Commit the storage implementation**
+- [x] **Step 3: Commit the storage implementation**
 
 ```bash
 git add src/xcals/_store.py
@@ -216,7 +216,7 @@ git commit -m "feat(xcals): vectorize trade-date shifting"
 - Modify: `src/xcals/calendar.py`
 - Modify: `src/xcals/__init__.py`
 
-- [ ] **Step 1: Add the validated wrapper**
+- [x] **Step 1: Add the validated wrapper**
 
 Add after scalar `shift_tradeday`:
 
@@ -247,13 +247,13 @@ def shift_trade_date(
 Import `shift_trade_date` from `.calendar` and add it to `__all__` in
 `src/xcals/__init__.py`.
 
-- [ ] **Step 2: Run focused tests and confirm GREEN**
+- [x] **Step 2: Run focused tests and confirm GREEN**
 
 Run the focused command from Task 1.
 
 Expected: all four selected tests PASS.
 
-- [ ] **Step 3: Commit the public API**
+- [x] **Step 3: Commit the public API**
 
 ```bash
 git add src/xcals/calendar.py src/xcals/__init__.py
@@ -266,7 +266,7 @@ git commit -m "feat(xcals): expose DataFrame trade-date shift"
 - Modify: `pyproject.toml`
 - Modify: `uv.lock`
 
-- [ ] **Step 1: Update project metadata**
+- [x] **Step 1: Update project metadata**
 
 Change these entries in `pyproject.toml`:
 
@@ -278,7 +278,7 @@ version = "0.1.11"
 "polars>=1.42.1",
 ```
 
-- [ ] **Step 2: Refresh the lock file**
+- [x] **Step 2: Refresh the lock file**
 
 Run:
 
@@ -290,7 +290,7 @@ uv sync
 Expected: `uv.lock` records Polars and `polars-runtime-32` 1.42.1, and the
 installed environment reports Polars 1.42.1.
 
-- [ ] **Step 3: Verify the installed dependency**
+- [x] **Step 3: Verify the installed dependency**
 
 Run:
 
@@ -300,7 +300,7 @@ uv run python -c 'import polars as pl; print(pl.__version__)'
 
 Expected: `1.42.1`.
 
-- [ ] **Step 4: Commit dependency and version metadata**
+- [x] **Step 4: Commit dependency and version metadata**
 
 ```bash
 git add pyproject.toml uv.lock
@@ -312,19 +312,19 @@ git commit -m "chore: upgrade polars to 1.42.1 and bump version to 0.1.11"
 **Files:**
 - Verify all modified source and test files.
 
-- [ ] **Step 1: Run the xcals test module**
+- [x] **Step 1: Run the xcals test module**
 
 Run: `uv run pytest tests/test_xcals_calendar.py -v`
 
 Expected: all xcals tests PASS.
 
-- [ ] **Step 2: Run the complete test suite**
+- [x] **Step 2: Run the complete test suite**
 
 Run: `uv run pytest tests/`
 
 Expected: all tests PASS.
 
-- [ ] **Step 3: Run formatting and lint checks**
+- [x] **Step 3: Run formatting and lint checks**
 
 Run:
 
@@ -335,13 +335,13 @@ uv run ruff check .
 
 Expected: both commands exit successfully with no formatting or lint errors.
 
-- [ ] **Step 4: Review the final diff**
+- [x] **Step 4: Review the final diff**
 
 Run: `git diff origin/main...HEAD --check && git status --short`
 
 Expected: no whitespace errors and a clean feature worktree.
 
-- [ ] **Step 5: Build the release artifacts**
+- [x] **Step 5: Build the release artifacts**
 
 Run: `uv build`
 
