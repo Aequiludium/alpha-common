@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import functools
+import os
+import uuid
 from collections.abc import Callable, Iterable
 from typing import Any, TypeVar
 
@@ -15,11 +17,12 @@ from loguru import logger
 
 from ._delay import DelayedFunction, delay
 from .progress import ProgressManager
+from .telemetry.publisher import PublisherProtocol, get_publisher
 
 T = TypeVar("T")
 
 
-def run_job(job: DelayedFunction, task_name: str) -> tuple[str, Any, bool]:
+def run_job(job: DelayedFunction, task_name: str) -> tuple[str, Any, bool, str | None]:
     """
     执行单个延迟任务。
 
@@ -38,10 +41,11 @@ def run_job(job: DelayedFunction, task_name: str) -> tuple[str, Any, bool]:
         ('test_task', 10, False)
     """
     try:
-        return task_name, job(), False
+        return task_name, job(), False, None
     except Exception as e:
-        logger.error(f"Failed to run job: {task_name}-{job}:{job.stored_kwargs}\n{e}")
-        return task_name, None, True
+        error = f"{type(e).__name__}: {e}"
+        logger.error(f"Failed to run job: {task_name}: {error}")
+        return task_name, None, True, error
 
 
 def multi_task_name(
@@ -49,6 +53,7 @@ def multi_task_name(
     job_num: int,
     backend: str,
     show_progress: bool,
+    completion_callback: Callable[[str, bool, str | None], None] | None = None,
 ) -> list[Any] | dict[str, list[Any]]:
     """
     并行执行多个任务。
@@ -78,38 +83,19 @@ def multi_task_name(
         return_as="generator_unordered",
     )
 
-    if show_progress:
-        with ProgressManager(show_progress=True) as progress_mgr:
-            for name, jobs in job_map.items():
-                progress_mgr.create_task(name, total=len(jobs))
-
-            job_lst = []
-            for name, jobs in job_map.items():
-                for job in jobs:
-                    job_lst.append(delayed(run_job)(job=job, task_name=name))
-
-            results: dict[str, list[Any]] = {}
-            for name, result, is_error in _parallel(job_lst):
-                tid = progress_mgr._task_map.get(name)
-                if is_error:
-                    progress_mgr.mark_failure(tid)
-                progress_mgr.update(tid)
-                if results.get(name) is None:
-                    results[name] = [result]
-                else:
-                    results[name].append(result)
-    else:
-        job_lst = []
-        for name, jobs in job_map.items():
-            for job in jobs:
-                job_lst.append(delayed(run_job)(job=job, task_name=name))
-
-        results: dict[str, list[Any]] = {}
-        for name, result, _ in _parallel(job_lst):
-            if results.get(name) is None:
-                results[name] = [result]
-            else:
-                results[name].append(result)
+    job_lst = [
+        delayed(run_job)(job=job, task_name=name) for name, jobs in job_map.items() for job in jobs
+    ]
+    results: dict[str, list[Any]] = {}
+    with ProgressManager(show_progress=show_progress) as progress_mgr:
+        progress_id = progress_mgr.create_task("ygo", total=len(job_lst))
+        for name, result, is_error, error in _parallel(job_lst):
+            if is_error:
+                progress_mgr.mark_failure(progress_id)
+            progress_mgr.update(progress_id)
+            if completion_callback is not None:
+                completion_callback(name, is_error, error)
+            results.setdefault(name, []).append(result)
 
     if len(results) == 1:
         return list(results.values())[0]
@@ -143,6 +129,8 @@ class Pool:
         n_jobs: int = 5,
         show_progress: bool = True,
         backend: str = "threading",
+        monitor: bool = True,
+        _publisher: PublisherProtocol | None = None,
     ):
         """
         初始化并发任务池。
@@ -155,6 +143,9 @@ class Pool:
         self._n_jobs = n_jobs
         self.backend = backend
         self.show_progress = show_progress
+        self.monitor = monitor
+        self._pool_id = f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        self._publisher = _publisher or get_publisher(enabled=monitor)
 
         self._job_map: dict[str, list[DelayedFunction]] = {}
 
@@ -254,12 +245,27 @@ class Pool:
         if job_num < self._n_jobs:
             logger.warning(f"N_JOBS floating out: use max job num {job_num} under {self._n_jobs}")
 
-        res = multi_task_name(
-            self._job_map,
-            job_num,
-            self.backend,
-            self.show_progress,
+        self._publisher.register_pool(
+            self._pool_id,
+            backend=self.backend,
+            n_jobs=job_num,
+            groups={name: len(jobs) for name, jobs in self._job_map.items()},
         )
+        try:
+            res = multi_task_name(
+                self._job_map,
+                job_num,
+                self.backend,
+                self.show_progress,
+                completion_callback=lambda name, failed, error: self._publisher.record_completion(
+                    self._pool_id,
+                    name,
+                    failed=failed,
+                    error=error,
+                ),
+            )
+        finally:
+            self._publisher.complete_pool(self._pool_id)
         self._job_map = {}
         return res
 
