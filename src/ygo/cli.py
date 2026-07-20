@@ -10,6 +10,7 @@ from rich.table import Table
 
 from .monitor import LiveProcess, read_live_snapshots
 from .telemetry.model import PoolSnapshot
+from .telemetry.shared import prepare_reader_process
 from .tui import YgoTopApp
 
 
@@ -29,6 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "top":
+        prepare_reader_process()
         YgoTopApp().run()
         return 0
     if args.command == "run":

@@ -1,3 +1,4 @@
+from ygo import cli as cli_module
 from ygo.cli import main
 from ygo.monitor import LiveProcess
 from ygo.telemetry.model import GroupSnapshot, PoolSnapshot, ProcessSnapshot
@@ -53,6 +54,24 @@ def test_ps_prints_live_groups(monkeypatch, capsys):
     output = capsys.readouterr().out
     assert "quote" in output
     assert "4/10" in output
+
+
+def test_top_prepares_shared_memory_before_textual_starts(monkeypatch):
+    events = []
+
+    class FakeApp:
+        def run(self):
+            events.append("run")
+
+    monkeypatch.setattr(
+        cli_module,
+        "prepare_reader_process",
+        lambda: events.append("prepare"),
+    )
+    monkeypatch.setattr(cli_module, "YgoTopApp", FakeApp)
+
+    assert main(["top"]) == 0
+    assert events == ["prepare", "run"]
 
 
 def test_show_and_errors_select_pool(monkeypatch, capsys):

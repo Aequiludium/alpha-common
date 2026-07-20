@@ -3,6 +3,8 @@ import subprocess
 import sys
 from dataclasses import replace
 
+import pytest
+
 from ygo.telemetry import shared as shared_module
 from ygo.telemetry.model import GroupSnapshot, PoolSnapshot, ProcessSnapshot
 from ygo.telemetry.shared import HEADER, SharedState
@@ -81,6 +83,34 @@ def test_create_supports_structured_byte_memoryview(monkeypatch):
     finally:
         state.close()
         state.unlink()
+
+
+@pytest.mark.parametrize(
+    ("platform_name", "version_info", "expected_calls"),
+    [
+        ("posix", (3, 12), 1),
+        ("posix", (3, 13), 0),
+        ("nt", (3, 12), 0),
+    ],
+)
+def test_prepare_reader_process_starts_tracker_only_for_legacy_posix(
+    monkeypatch,
+    platform_name,
+    version_info,
+    expected_calls,
+):
+    calls = []
+    monkeypatch.setattr(shared_module.os, "name", platform_name)
+    monkeypatch.setattr(shared_module.sys, "version_info", version_info)
+    monkeypatch.setattr(
+        shared_module.resource_tracker,
+        "ensure_running",
+        lambda: calls.append("ensure_running"),
+    )
+
+    shared_module.prepare_reader_process()
+
+    assert len(calls) == expected_calls
 
 
 def test_reader_rejects_checksum_mismatch():

@@ -17,6 +17,11 @@ MIN_CAPACITY = HEADER.size + 512
 _OWNED_NAMES: set[str] = set()
 
 
+def prepare_reader_process() -> None:
+    if os.name != "nt" and sys.version_info < (3, 13):
+        resource_tracker.ensure_running()
+
+
 class TelemetryOverflowError(ValueError):
     """Raised when even a reduced telemetry snapshot cannot fit."""
 
