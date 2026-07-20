@@ -25,6 +25,7 @@ def test_process_snapshot_round_trip():
                         completed=4,
                         failed=1,
                         started_monotonic=20.0,
+                        finished_monotonic=25.0,
                         last_error="timeout",
                     ),
                 ),
@@ -33,6 +34,39 @@ def test_process_snapshot_round_trip():
     )
 
     assert ProcessSnapshot.from_json(snapshot.to_json()) == snapshot
+
+
+def test_snapshot_accepts_group_without_finish_timestamp():
+    snapshot = ProcessSnapshot(
+        pid=123,
+        process_started_at=1000.5,
+        command="python sync.py",
+        cwd="/tmp/work",
+        pools=(
+            PoolSnapshot(
+                id="pool-1",
+                backend="threading",
+                n_jobs=1,
+                status="running",
+                groups=(
+                    GroupSnapshot(
+                        id="quote",
+                        status="pending",
+                        total=1,
+                        completed=0,
+                        failed=0,
+                        started_monotonic=20.0,
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    assert ProcessSnapshot.from_json(snapshot.to_json()) == snapshot
+
+    payload = json.loads(snapshot.to_json())
+    del payload["pools"][0]["groups"][0]["finished_monotonic"]
+    assert ProcessSnapshot.from_json(json.dumps(payload)) == snapshot
 
 
 def test_snapshot_rejects_incompatible_schema():

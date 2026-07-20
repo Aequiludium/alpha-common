@@ -40,8 +40,17 @@ def rows_from_processes(
     for process in processes:
         for pool in process.snapshot.pools:
             for group in pool.groups:
-                elapsed = max(0.0, current - group.started_monotonic)
-                rate = group.completed / elapsed if elapsed else 0.0
+                if group.status == "pending" or (
+                    group.status in {"done", "error"} and group.finished_monotonic is None
+                ):
+                    rate_text = "--"
+                    elapsed_text = "--"
+                else:
+                    end = group.finished_monotonic if group.status in {"done", "error"} else current
+                    elapsed = max(0.0, end - group.started_monotonic)
+                    rate = group.completed / elapsed if elapsed else 0.0
+                    rate_text = f"{rate:.1f}/s"
+                    elapsed_text = _format_duration(elapsed)
                 rows.append(
                     MonitorRow(
                         key=f"{process.snapshot.pid}:{pool.id}:{group.id}",
@@ -49,9 +58,9 @@ def rows_from_processes(
                             "pid": str(process.snapshot.pid),
                             "status": group.status,
                             "progress": f"{group.completed}/{group.total}",
-                            "rate": f"{rate:.1f}/s",
+                            "rate": rate_text,
                             "failed": str(group.failed),
-                            "elapsed": _format_duration(elapsed),
+                            "elapsed": elapsed_text,
                             "group": group.id,
                             "command": process.entry.command,
                         },

@@ -16,6 +16,7 @@ class GroupSnapshot:
     failed: int
     started_monotonic: float
     last_error: str | None = None
+    finished_monotonic: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +90,7 @@ def _group_from_dict(payload: Any) -> GroupSnapshot:
     if not isinstance(payload, dict):
         raise ValueError("group snapshot must be an object")
     last_error = payload.get("last_error")
+    finished_monotonic = payload.get("finished_monotonic")
     return GroupSnapshot(
         id=str(payload["id"]),
         status=str(payload["status"]),
@@ -97,4 +99,5 @@ def _group_from_dict(payload: Any) -> GroupSnapshot:
         failed=int(payload["failed"]),
         started_monotonic=float(payload["started_monotonic"]),
         last_error=None if last_error is None else str(last_error),
+        finished_monotonic=(None if finished_monotonic is None else float(finished_monotonic)),
     )

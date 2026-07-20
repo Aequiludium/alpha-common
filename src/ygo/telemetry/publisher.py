@@ -38,6 +38,8 @@ class PublisherProtocol(Protocol):
         *,
         failed: bool,
         error: str | None = None,
+        started_monotonic: float,
+        finished_monotonic: float,
     ) -> None: ...
 
     def complete_pool(self, pool_id: str) -> None: ...
@@ -47,8 +49,10 @@ class PublisherProtocol(Protocol):
 class _GroupState:
     id: str
     total: int
-    started_monotonic: float
-    status: str = "running"
+    registered_monotonic: float
+    status: str = "pending"
+    started_monotonic: float | None = None
+    finished_monotonic: float | None = None
     completed: int = 0
     failed: int = 0
     last_error: str | None = None
@@ -127,7 +131,7 @@ class TelemetryPublisher:
                 backend=backend,
                 n_jobs=n_jobs,
                 groups={
-                    name: _GroupState(id=name, total=total, started_monotonic=now)
+                    name: _GroupState(id=name, total=total, registered_monotonic=now)
                     for name, total in groups.items()
                 },
             )
@@ -143,9 +147,16 @@ class TelemetryPublisher:
         *,
         failed: bool,
         error: str | None = None,
+        started_monotonic: float,
+        finished_monotonic: float,
     ) -> None:
         def action() -> None:
             group = self._pools[pool_id].groups[group_id]
+            if group.started_monotonic is None or started_monotonic < group.started_monotonic:
+                group.started_monotonic = started_monotonic
+            if group.finished_monotonic is None or finished_monotonic > group.finished_monotonic:
+                group.finished_monotonic = finished_monotonic
+            group.status = "running"
             group.completed += 1
             if failed:
                 group.failed += 1
@@ -162,7 +173,7 @@ class TelemetryPublisher:
             pool = self._pools[pool_id]
             pool.status = "error" if any(group.failed for group in pool.groups.values()) else "done"
             for group in pool.groups.values():
-                if group.status == "running":
+                if group.status in {"pending", "running"}:
                     group.status = "error" if group.failed else "done"
             self._dirty = True
             self._publish(force=True)
@@ -202,8 +213,17 @@ class TelemetryPublisher:
                             total=group.total,
                             completed=group.completed,
                             failed=group.failed,
-                            started_monotonic=group.started_monotonic,
+                            started_monotonic=(
+                                group.started_monotonic
+                                if group.started_monotonic is not None
+                                else group.registered_monotonic
+                            ),
                             last_error=group.last_error,
+                            finished_monotonic=(
+                                group.finished_monotonic
+                                if group.status in {"done", "error"}
+                                else None
+                            ),
                         )
                         for group in pool.groups.values()
                     ),

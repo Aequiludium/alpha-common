@@ -60,10 +60,11 @@ def test_subprocess_pool_is_discoverable_and_cleans_up(tmp_path):
         pool_id = process.stdout.readline().strip()
         assert pool_id
 
-        running = wait_until(lambda: read_live_snapshots(registry))
-        group = running[0].snapshot.pools[0].groups[0]
+        discovered = wait_until(lambda: read_live_snapshots(registry))
+        group = discovered[0].snapshot.pools[0].groups[0]
         assert group.id == "quote"
-        assert group.status == "running"
+        assert group.status == "pending"
+        assert group.finished_monotonic is None
 
         release.touch()
         assert process.stdout.readline().strip() == "DONE"
@@ -75,7 +76,9 @@ def test_subprocess_pool_is_discoverable_and_cleans_up(tmp_path):
             current = records[0].snapshot.pools[0].groups[0]
             return current if current.status == "done" else None
 
-        assert wait_until(completed_group).completed == 1
+        completed = wait_until(completed_group)
+        assert completed.completed == 1
+        assert completed.finished_monotonic >= completed.started_monotonic
         exit_file.touch()
         stdout, stderr = process.communicate(timeout=5)
         assert process.returncode == 0, f"{stdout}\n{stderr}"

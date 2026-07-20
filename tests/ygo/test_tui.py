@@ -23,14 +23,22 @@ class FakeTable:
         self.calls.append(("update_cell", str(row_key), str(column_key), value))
 
 
-def make_live_process(*, completed: int = 4, generation: int = 2) -> LiveProcess:
+def make_live_process(
+    *,
+    completed: int = 4,
+    generation: int = 2,
+    status: str = "running",
+    started_monotonic: float = 90.0,
+    finished_monotonic: float | None = None,
+) -> LiveProcess:
     group = GroupSnapshot(
         id="quote",
-        status="running",
+        status=status,
         total=10,
         completed=completed,
         failed=0,
-        started_monotonic=90.0,
+        started_monotonic=started_monotonic,
+        finished_monotonic=finished_monotonic,
     )
     snapshot = ProcessSnapshot(
         pid=123,
@@ -101,6 +109,32 @@ def test_reconcile_does_nothing_for_same_generation():
     reconciler.apply(rows, generation=(2,))
 
     assert table.calls == []
+
+
+def test_pending_group_hides_rate_and_elapsed():
+    process = make_live_process(completed=0, status="pending")
+
+    row = rows_from_processes([process], now=100.0)[0]
+
+    assert row.cells["rate"] == "--"
+    assert row.cells["elapsed"] == "--"
+
+
+def test_done_group_freezes_rate_and_elapsed():
+    process = make_live_process(
+        completed=10,
+        status="done",
+        started_monotonic=90.0,
+        finished_monotonic=95.0,
+    )
+
+    first = rows_from_processes([process], now=100.0)[0]
+    later = rows_from_processes([process], now=200.0)[0]
+
+    assert first.cells["rate"] == "2.0/s"
+    assert first.cells["elapsed"] == "00:00:05"
+    assert later.cells["rate"] == first.cells["rate"]
+    assert later.cells["elapsed"] == first.cells["elapsed"]
 
 
 def test_textual_app_keeps_table_mounted_while_cells_change():
