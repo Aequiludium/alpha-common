@@ -97,3 +97,6 @@ class ProgressManager:
         if self._progress is not None:
             self._progress.__exit__(exc_type, exc_val, exc_tb)
             self._progress = None
+        self._task_map.clear()
+        self._task_names.clear()
+        self._failed_tasks.clear()

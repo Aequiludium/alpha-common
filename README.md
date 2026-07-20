@@ -154,14 +154,13 @@ from ygo import Pool
 
 pool = Pool(n_jobs=4, show_progress=True)
 
-# 方式一：装饰器注册（推荐）
-@pool.submit(job_name="download")
 def download(date: str) -> dict:
     return {"date": date, "data": fetch_data(date)}
 
-# 调用注册函数会将任务加入池中
-download(date="2024-01-01")
-download(date="2024-01-02")
+# submit 返回任务收集函数；调用它会将任务加入池中
+queue_download = pool.submit(download, job_name="download")
+queue_download(date="2024-01-01")
+queue_download(date="2024-01-02")
 
 # 并行执行所有任务
 results = pool.do()  # -> [{"date": "2024-01-01", ...}, {"date": "2024-01-02", ...}]
@@ -182,6 +181,24 @@ with Pool(n_jobs=8) as pool:
         pool.submit(download)(date=day)
     results = pool.do()
 ```
+
+`show_progress=True` 保持为默认值，并在业务终端显示一条紧凑的聚合进度。
+本机监控默认开启，与内联进度相互独立；需要安静执行时可以使用
+`show_progress=False`，需要完全关闭监控状态发布时使用 `monitor=False` 或设置
+`YGO_MONITOR=0`。
+
+在另一个终端中使用增量刷新的任务监控器：
+
+```bash
+ygo top                       # 交互式监控所有本机 ygo 任务
+ygo ps                        # 输出一次当前任务列表
+ygo show <pool-id>            # 查看一个 Pool
+ygo errors <pool-id>          # 查看当前错误摘要
+ygo run -- python script.py   # 运行可被 ygo top 发现的程序
+```
+
+`ygo top` 使用共享内存读取聚合状态，只更新发生变化的表格单元格。业务日志仍
+保留在原程序终端，不会破坏监控界面。
 
 ---
 
