@@ -42,7 +42,6 @@ class SharedState:
         shm = shared_memory.SharedMemory(create=True, size=capacity)
         _OWNED_NAMES.add(shm._name)
         state = cls(shm, owner=True)
-        state._shm.buf[:] = b"\0" * capacity
         HEADER.pack_into(
             state._shm.buf,
             0,

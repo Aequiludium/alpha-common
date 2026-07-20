@@ -1,7 +1,9 @@
+import ctypes
 import subprocess
 import sys
 from dataclasses import replace
 
+from ygo.telemetry import shared as shared_module
 from ygo.telemetry.model import GroupSnapshot, PoolSnapshot, ProcessSnapshot
 from ygo.telemetry.shared import HEADER, SharedState
 
@@ -50,6 +52,35 @@ def test_shared_state_round_trip():
         reader.close()
         writer.close()
         writer.unlink()
+
+
+def test_create_supports_structured_byte_memoryview(monkeypatch):
+    class StructuredBufferSharedMemory:
+        def __init__(self, *, create, size):
+            assert create is True
+            self.size = size
+            self.name = "structured-buffer"
+            self._name = self.name
+            self.buf = memoryview((ctypes.c_ubyte * size)())
+
+        def close(self):
+            self.buf.release()
+
+        def unlink(self):
+            pass
+
+    monkeypatch.setattr(
+        shared_module.shared_memory,
+        "SharedMemory",
+        StructuredBufferSharedMemory,
+    )
+
+    state = SharedState.create(capacity=4096)
+    try:
+        assert HEADER.unpack_from(state._shm.buf)[0] == b"YGO1"
+    finally:
+        state.close()
+        state.unlink()
 
 
 def test_reader_rejects_checksum_mismatch():
