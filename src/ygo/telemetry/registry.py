@@ -57,7 +57,7 @@ class RuntimeRegistry:
         *,
         process_identity: Callable[[int], float | None] | None = None,
     ):
-        self.root = Path(root) if root is not None else user_runtime_path("ygo")
+        self.root = Path(root) if root is not None else _default_runtime_root()
         self._process_identity = process_identity or _process_identity
 
     def register(self, entry: RegistryEntry) -> Path:
@@ -112,6 +112,11 @@ def _process_identity(pid: int) -> float | None:
         return psutil.Process(pid).create_time()
     except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
         return None
+
+
+def _default_runtime_root() -> Path:
+    configured = os.environ.get("YGO_RUNTIME_DIR")
+    return Path(configured) if configured else user_runtime_path("ygo")
 
 
 def _optional_string(value: object) -> str | None:

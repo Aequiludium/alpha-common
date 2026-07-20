@@ -35,6 +35,12 @@ def test_registry_round_trip(tmp_path):
     assert registry.entries() == []
 
 
+def test_default_registry_honors_runtime_directory_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("YGO_RUNTIME_DIR", str(tmp_path))
+
+    assert RuntimeRegistry().root == tmp_path
+
+
 def test_discovery_removes_reused_pid(tmp_path):
     registry = RuntimeRegistry(tmp_path, process_identity=lambda pid: 999.0)
     registry.register(make_entry())

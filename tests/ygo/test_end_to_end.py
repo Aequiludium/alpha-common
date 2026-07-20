@@ -42,13 +42,12 @@ def wait_until(predicate, *, timeout: float = 5.0):
 
 
 def test_subprocess_pool_is_discoverable_and_cleans_up(tmp_path):
-    runtime_base = tmp_path / "runtime"
-    runtime_base.mkdir()
-    registry = RuntimeRegistry(runtime_base / "ygo")
+    runtime_dir = tmp_path / "runtime"
+    registry = RuntimeRegistry(runtime_dir)
     release = tmp_path / "release"
     exit_file = tmp_path / "exit"
     env = dict(os.environ)
-    env["XDG_RUNTIME_DIR"] = str(runtime_base)
+    env["YGO_RUNTIME_DIR"] = str(runtime_dir)
     process = subprocess.Popen(
         [sys.executable, "-c", PRODUCER, str(release), str(exit_file)],
         env=env,
