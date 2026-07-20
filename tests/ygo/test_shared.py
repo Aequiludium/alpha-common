@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from dataclasses import replace
 
 from ygo.telemetry.model import GroupSnapshot, PoolSnapshot, ProcessSnapshot
@@ -113,6 +115,32 @@ def test_overflow_truncates_error_details():
                 ),
             ),
         )
+    finally:
+        state.close()
+        state.unlink()
+
+
+def test_reader_process_does_not_claim_ownership():
+    state = SharedState.create(capacity=4096)
+    try:
+        state.write(make_snapshot())
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "from ygo.telemetry.shared import SharedState; "
+                    f"s = SharedState.open({state.name!r}); "
+                    "assert s.read() is not None; s.close()"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert "resource_tracker" not in result.stderr
     finally:
         state.close()
         state.unlink()

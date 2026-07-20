@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import os
 import struct
+import sys
 import time
 import zlib
 from dataclasses import dataclass, replace
-from multiprocessing import shared_memory
+from multiprocessing import resource_tracker, shared_memory
 
 from .model import SCHEMA_VERSION, GroupSnapshot, ProcessSnapshot
 
@@ -12,6 +14,7 @@ MAGIC = b"YGO1"
 HEADER = struct.Struct("<4sHBBQIIQ")
 DEFAULT_CAPACITY = 1024 * 1024
 MIN_CAPACITY = HEADER.size + 512
+_OWNED_NAMES: set[str] = set()
 
 
 class TelemetryOverflowError(ValueError):
@@ -37,6 +40,7 @@ class SharedState:
         if capacity < MIN_CAPACITY:
             raise ValueError(f"shared memory capacity must be at least {MIN_CAPACITY}")
         shm = shared_memory.SharedMemory(create=True, size=capacity)
+        _OWNED_NAMES.add(shm._name)
         state = cls(shm, owner=True)
         state._shm.buf[:] = b"\0" * capacity
         HEADER.pack_into(
@@ -55,7 +59,13 @@ class SharedState:
 
     @classmethod
     def open(cls, name: str) -> SharedState:
-        return cls(shared_memory.SharedMemory(name=name, create=False), owner=False)
+        if sys.version_info >= (3, 13):
+            shm = shared_memory.SharedMemory(name=name, create=False, track=False)
+        else:
+            shm = shared_memory.SharedMemory(name=name, create=False)
+            if os.name != "nt" and shm._name not in _OWNED_NAMES:
+                resource_tracker.unregister(shm._name, "shared_memory")
+        return cls(shm, owner=False)
 
     @property
     def name(self) -> str:
@@ -179,6 +189,8 @@ class SharedState:
             self._shm.unlink()
         except FileNotFoundError:
             pass
+        finally:
+            _OWNED_NAMES.discard(self._shm._name)
 
 
 def _truncate_snapshot(snapshot: ProcessSnapshot) -> ProcessSnapshot:
