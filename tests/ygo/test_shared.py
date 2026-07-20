@@ -122,8 +122,8 @@ def test_reader_rejects_in_progress_generation():
 
 
 def test_overflow_truncates_error_details():
-    oversized = make_snapshot(last_error="x" * 4000)
     state = SharedState.create(capacity=2048)
+    oversized = make_snapshot(last_error="x" * (state.slot_capacity * 2))
     try:
         state.write(oversized)
         read = state.read()
