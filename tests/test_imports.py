@@ -3,6 +3,7 @@
 
 def test_import_xcals():
     import xcals  # noqa: F401
+    from xcals import shift_trade_date  # noqa: F401
 
 
 def test_import_blazestore():
