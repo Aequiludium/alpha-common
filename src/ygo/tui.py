@@ -163,7 +163,12 @@ class TableReconciler:
                 continue
             for column, value in row.cells.items():
                 if previous.get(column) != value:
-                    self.table.update_cell(key, column, value)
+                    self.table.update_cell(
+                        key,
+                        column,
+                        value,
+                        update_width=True,
+                    )
                     previous[column] = value
                     changed_columns.add(column)
 
