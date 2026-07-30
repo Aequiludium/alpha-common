@@ -22,9 +22,7 @@ class FakeTable:
         self.calls.append(("remove_row", str(key)))
 
     def update_cell(self, row_key, column_key, value, *, update_width=False):
-        self.calls.append(
-            ("update_cell", str(row_key), str(column_key), value, update_width)
-        )
+        self.calls.append(("update_cell", str(row_key), str(column_key), value, update_width))
 
 
 def make_task(
@@ -71,9 +69,7 @@ def row_order(table: DataTable) -> list[str]:
 
 def column_width(table: DataTable, key: str) -> int:
     return next(
-        column.content_width
-        for column in table.ordered_columns
-        if str(column.key.value) == key
+        column.content_width for column in table.ordered_columns if str(column.key.value) == key
     )
 
 
@@ -94,9 +90,7 @@ def test_reconcile_updates_only_changed_cells():
 
     result = reconciler.apply([changed], generation=(4,))
 
-    assert [
-        (call[0], call[1], call[2], call[3].text, call[4]) for call in table.calls
-    ] == [
+    assert [(call[0], call[1], call[2], call[3].text, call[4]) for call in table.calls] == [
         ("update_cell", "task-123", "progress", "5/10", True),
         ("update_cell", "task-123", "rate", "0.5/s", True),
     ]
