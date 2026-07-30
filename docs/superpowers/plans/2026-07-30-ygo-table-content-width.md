@@ -48,7 +48,7 @@ Add imports and the protocol method:
 
 ```python
 from rich.cells import cell_len
-from rich.console import Console, ConsoleOptions
+from rich.console import Console, ConsoleOptions, RenderResult
 from rich.measure import Measurement
 
 
@@ -57,8 +57,12 @@ class TableCell:
     text: str
     sort_value: SortValue
 
-    def __rich__(self) -> str:
-        return self.text
+    def __rich_console__(
+        self,
+        console: Console,
+        options: ConsoleOptions,
+    ) -> RenderResult:
+        yield self.text
 
     def __rich_measure__(
         self,

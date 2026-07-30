@@ -3,10 +3,12 @@ import datetime
 from dataclasses import replace
 from types import SimpleNamespace
 
+from rich.console import Console
+from textual.render import measure
 from textual.widgets import DataTable
 
 from ygo.monitor import MonitoredTask, MonitorState
-from ygo.tui import TableReconciler, YgoTopApp, row_from_task
+from ygo.tui import TableCell, TableReconciler, YgoTopApp, row_from_task
 
 
 class FakeTable:
@@ -62,6 +64,13 @@ def make_task(
 
 def row_order(table: DataTable) -> list[str]:
     return [str(row.key.value) for row in table.ordered_rows]
+
+
+def test_table_cell_reports_plain_and_wide_terminal_widths():
+    console = Console()
+
+    assert measure(console, TableCell("2026-07-30 14:23:45", 0.0), 1) == 19
+    assert measure(console, TableCell("开始时间", "开始时间"), 1) == 8
 
 
 def test_reconcile_updates_only_changed_cells():
