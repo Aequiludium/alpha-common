@@ -5,7 +5,8 @@
 Upgrade `ygo top` with an actual group start-time column, interactive column
 sorting, newest-first default ordering, and persistent history for the latest
 100 completed task groups. A task remains the existing aggregate row identified
-by `(process start identity, pool ID, group ID)`; individual jobs are not stored.
+by `(process start identity, pool ID, group ID, group registration time)`;
+individual jobs are not stored.
 
 ## User Interface
 
@@ -50,8 +51,10 @@ The record contains the stable task key, PID and process start identity, pool an
 group IDs, command, status, counters, error, registration/start/finish
 timestamps, and frozen elapsed/rate values. It contains no arguments,
 environment variables, or log contents beyond metadata already exposed by
-telemetry. Including process start identity prevents PID reuse from colliding
-with an older task.
+telemetry. Process start identity prevents PID reuse collisions, while group
+registration time distinguishes repeated executions of the same `Pool`.
+The publisher advances equal or backward registration readings minimally so
+each execution keeps a distinct identity and newest-first order.
 
 On terminal transition, the producer writes the completed group immediately.
 Normal process cleanup still removes the runtime registry and shared memory but

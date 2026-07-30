@@ -95,7 +95,13 @@ def test_monitor_merges_history_and_prefers_live_task(tmp_path):
         command="pytest",
         cwd=str(tmp_path),
     )
-    live_key = make_task_key(os.getpid(), process_started_at, "pool-1", "quote")
+    live_key = make_task_key(
+        os.getpid(),
+        process_started_at,
+        "pool-1",
+        "quote",
+        process_started_at,
+    )
     duplicate = HistoryRecord(
         task_key=live_key,
         pid=os.getpid(),
@@ -109,14 +115,14 @@ def test_monitor_merges_history_and_prefers_live_task(tmp_path):
         failed=0,
         last_error=None,
         log_path=None,
-        registered_at=900.0,
+        registered_at=process_started_at,
         started_at=901.0,
         finished_at=906.0,
         elapsed_seconds=5.0,
         rate=2.0,
     )
     historical = HistoryRecord(
-        task_key=make_task_key(99, 2.0, "pool-2", "history"),
+        task_key=make_task_key(99, 2.0, "pool-2", "history", 800.0),
         pid=99,
         process_started_at=2.0,
         pool_id="pool-2",

@@ -205,6 +205,34 @@ def test_publisher_archives_terminal_group_once_with_frozen_metrics():
     assert record.rate == 0.4
 
 
+def test_repeated_pool_execution_gets_distinct_history_identity():
+    history = FakeHistory()
+    publisher = TelemetryPublisher(
+        transport=FakeTransport(),
+        history=history,
+        clock=FakeClock(100.0),
+        wall_clock=FakeClock(1000.0),
+        start_thread=False,
+    )
+
+    for offset in (0.0, 10.0):
+        publisher.register_pool("p1", backend="threading", n_jobs=1, groups={"g": 1})
+        publisher.record_completion(
+            "p1",
+            "g",
+            failed=False,
+            started_monotonic=101.0 + offset,
+            finished_monotonic=102.0 + offset,
+            started_at=1001.0 + offset,
+            finished_at=1002.0 + offset,
+        )
+        publisher.complete_pool("p1")
+
+    assert len(history.records) == 2
+    assert history.records[0].task_key != history.records[1].task_key
+    assert history.records[0].registered_at < history.records[1].registered_at
+
+
 def test_history_failure_does_not_disable_live_telemetry():
     transport = FakeTransport()
     warnings = []

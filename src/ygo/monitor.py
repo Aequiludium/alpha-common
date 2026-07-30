@@ -100,6 +100,11 @@ def _live_tasks(process: LiveProcess) -> tuple[MonitoredTask, ...]:
     tasks: list[MonitoredTask] = []
     for pool in process.snapshot.pools:
         for group in pool.groups:
+            registered_at = (
+                group.registered_at
+                if group.registered_at is not None
+                else process.snapshot.process_started_at
+            )
             tasks.append(
                 MonitoredTask(
                     key=make_task_key(
@@ -107,17 +112,14 @@ def _live_tasks(process: LiveProcess) -> tuple[MonitoredTask, ...]:
                         process.snapshot.process_started_at,
                         pool.id,
                         group.id,
+                        registered_at,
                     ),
                     pid=process.snapshot.pid,
                     status=group.status,
                     completed=group.completed,
                     total=group.total,
                     failed=group.failed,
-                    registered_at=(
-                        group.registered_at
-                        if group.registered_at is not None
-                        else process.snapshot.process_started_at
-                    ),
+                    registered_at=registered_at,
                     started_at=group.started_at,
                     finished_at=group.finished_at,
                     started_monotonic=group.started_monotonic,

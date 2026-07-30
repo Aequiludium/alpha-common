@@ -222,8 +222,8 @@ Add tests that:
 Also test the shared key helper:
 
 ```python
-assert make_task_key(42, 1.5, "pool", "group") == (
-    '[42,1500000000,"pool","group"]'
+assert make_task_key(42, 1.5, "pool", "group", 2.5) == (
+    '[42,1500000000,"pool","group",2500000000]'
 )
 ```
 
@@ -312,10 +312,12 @@ def make_task_key(
     process_started_at: float,
     pool_id: str,
     group_id: str,
+    registered_at: float,
 ) -> str:
-    identity_ns = int(process_started_at * 1_000_000_000)
+    process_identity_ns = int(process_started_at * 1_000_000_000)
+    registration_ns = int(registered_at * 1_000_000_000)
     return json.dumps(
-        [pid, identity_ns, pool_id, group_id],
+        [pid, process_identity_ns, pool_id, group_id, registration_ns],
         ensure_ascii=False,
         separators=(",", ":"),
     )
@@ -421,8 +423,9 @@ archived: bool = False
 ```
 
 Add `history` and `wall_clock` constructor dependencies. Set `registered_at`
-when registering the pool. On each completion, keep the earliest start and
-latest finish for both clock families.
+when registering the pool, advancing equal or backward readings minimally so
+repeated executions keep distinct task keys. On each completion, keep the
+earliest start and latest finish for both clock families.
 
 - [ ] **Step 4: Archive exactly once at terminal transition**
 
@@ -445,6 +448,7 @@ def _archive_group(self, pool: _PoolState, group: _GroupState) -> None:
             self._process_started_at,
             pool.id,
             group.id,
+            group.registered_at,
         ),
         pid=self._pid,
         process_started_at=self._process_started_at,
@@ -565,9 +569,10 @@ Import and use the shared helper from `telemetry.history`:
 from .telemetry.history import HistoryStore, make_task_key
 ```
 
-Flatten every live group into `MonitoredTask`. Use
-`group.registered_at or process.snapshot.process_started_at` for backward
-compatibility with old producers.
+Flatten every live group into `MonitoredTask`. Use `group.registered_at` when it
+is not `None`, otherwise fall back to `process.snapshot.process_started_at` for
+backward compatibility with old producers. Pass that same timestamp into the
+shared task-key helper.
 
 - [ ] **Step 4: Merge history with live state**
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import atexit
+import math
 import os
 import shlex
 import sys
@@ -102,6 +103,7 @@ class TelemetryPublisher:
         self._disabled = False
         self._warned = False
         self._history_warned = False
+        self._last_registered_at: float | None = None
         self._closed = False
         self._last_write: float | None = None
         self._registry = registry
@@ -147,6 +149,12 @@ class TelemetryPublisher:
         def action() -> None:
             now = self._clock()
             registered_at = self._wall_clock()
+            if self._last_registered_at is not None and registered_at <= self._last_registered_at:
+                registered_at = max(
+                    self._last_registered_at + 1e-9,
+                    math.nextafter(self._last_registered_at, math.inf),
+                )
+            self._last_registered_at = registered_at
             self._pools[pool_id] = _PoolState(
                 id=pool_id,
                 backend=backend,
@@ -290,6 +298,7 @@ class TelemetryPublisher:
                 self._process_started_at,
                 pool.id,
                 group.id,
+                group.registered_at,
             ),
             pid=self._pid,
             process_started_at=self._process_started_at,

@@ -81,10 +81,12 @@ def make_task_key(
     process_started_at: float,
     pool_id: str,
     group_id: str,
+    registered_at: float,
 ) -> str:
-    identity_ns = int(process_started_at * 1_000_000_000)
+    process_identity_ns = int(process_started_at * 1_000_000_000)
+    registration_ns = int(registered_at * 1_000_000_000)
     return json.dumps(
-        [pid, identity_ns, pool_id, group_id],
+        [pid, process_identity_ns, pool_id, group_id, registration_ns],
         ensure_ascii=False,
         separators=(",", ":"),
     )
