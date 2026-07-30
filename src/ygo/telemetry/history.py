@@ -83,7 +83,11 @@ def make_task_key(
     group_id: str,
 ) -> str:
     identity_ns = int(process_started_at * 1_000_000_000)
-    return f"{pid}:{identity_ns}:{pool_id}:{group_id}"
+    return json.dumps(
+        [pid, identity_ns, pool_id, group_id],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
 
 
 class HistoryStore:

@@ -35,7 +35,16 @@ def test_history_round_trip_and_stable_task_key(tmp_path):
     store.append(record)
 
     assert store.recent() == [record]
-    assert make_task_key(42, 1.5, "pool", "group") == "42:1500000000:pool:group"
+    assert make_task_key(42, 1.5, "pool", "group") == ('[42,1500000000,"pool","group"]')
+
+
+def test_task_key_does_not_collide_when_ids_contain_colons():
+    assert make_task_key(42, 1.5, "pool:part", "group") != make_task_key(
+        42,
+        1.5,
+        "pool",
+        "part:group",
+    )
 
 
 def test_history_overwrites_same_task_without_duplication(tmp_path):

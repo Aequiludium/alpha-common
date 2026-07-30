@@ -222,7 +222,9 @@ Add tests that:
 Also test the shared key helper:
 
 ```python
-assert make_task_key(42, 1.5, "pool", "group") == "42:1500000000:pool:group"
+assert make_task_key(42, 1.5, "pool", "group") == (
+    '[42,1500000000,"pool","group"]'
+)
 ```
 
 - [ ] **Step 2: Run the tests and verify red**
@@ -312,7 +314,11 @@ def make_task_key(
     group_id: str,
 ) -> str:
     identity_ns = int(process_started_at * 1_000_000_000)
-    return f"{pid}:{identity_ns}:{pool_id}:{group_id}"
+    return json.dumps(
+        [pid, identity_ns, pool_id, group_id],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
 
 class HistoryStore:
     def __init__(self, root: str | Path | None = None):
