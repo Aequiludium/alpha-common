@@ -6,6 +6,9 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
+from rich.cells import cell_len
+from rich.console import Console, ConsoleOptions, RenderResult
+from rich.measure import Measurement
 from textual.app import App, ComposeResult
 from textual.widgets import DataTable, Footer, Header
 
@@ -31,8 +34,20 @@ class TableCell:
     text: str
     sort_value: SortValue
 
-    def __rich__(self) -> str:
-        return self.text
+    def __rich_console__(
+        self,
+        console: Console,
+        options: ConsoleOptions,
+    ) -> RenderResult:
+        yield self.text
+
+    def __rich_measure__(
+        self,
+        console: Console,
+        options: ConsoleOptions,
+    ) -> Measurement:
+        width = cell_len(self.text)
+        return Measurement(width, width)
 
     def __str__(self) -> str:
         return self.text
@@ -148,7 +163,12 @@ class TableReconciler:
                 continue
             for column, value in row.cells.items():
                 if previous.get(column) != value:
-                    self.table.update_cell(key, column, value)
+                    self.table.update_cell(
+                        key,
+                        column,
+                        value,
+                        update_width=True,
+                    )
                     previous[column] = value
                     changed_columns.add(column)
 

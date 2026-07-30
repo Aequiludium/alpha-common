@@ -3,10 +3,12 @@ import datetime
 from dataclasses import replace
 from types import SimpleNamespace
 
+from rich.console import Console
+from textual.render import measure
 from textual.widgets import DataTable
 
 from ygo.monitor import MonitoredTask, MonitorState
-from ygo.tui import TableReconciler, YgoTopApp, row_from_task
+from ygo.tui import TableCell, TableReconciler, YgoTopApp, row_from_task
 
 
 class FakeTable:
@@ -19,8 +21,8 @@ class FakeTable:
     def remove_row(self, key):
         self.calls.append(("remove_row", str(key)))
 
-    def update_cell(self, row_key, column_key, value):
-        self.calls.append(("update_cell", str(row_key), str(column_key), value))
+    def update_cell(self, row_key, column_key, value, *, update_width=False):
+        self.calls.append(("update_cell", str(row_key), str(column_key), value, update_width))
 
 
 def make_task(
@@ -38,6 +40,7 @@ def make_task(
     elapsed_seconds: float | None = None,
     rate: float | None = None,
     group_id: str = "quote",
+    command: str = "python sync.py",
 ) -> MonitoredTask:
     return MonitoredTask(
         key=key,
@@ -54,7 +57,7 @@ def make_task(
         elapsed_seconds=elapsed_seconds,
         rate=rate,
         group_id=group_id,
-        command="python sync.py",
+        command=command,
         error=None,
         log_path=None,
     )
@@ -62,6 +65,19 @@ def make_task(
 
 def row_order(table: DataTable) -> list[str]:
     return [str(row.key.value) for row in table.ordered_rows]
+
+
+def column_width(table: DataTable, key: str) -> int:
+    return next(
+        column.content_width for column in table.ordered_columns if str(column.key.value) == key
+    )
+
+
+def test_table_cell_reports_plain_and_wide_terminal_widths():
+    console = Console()
+
+    assert measure(console, TableCell("2026-07-30 14:23:45", 0.0), 1) == 19
+    assert measure(console, TableCell("开始时间", "开始时间"), 1) == 8
 
 
 def test_reconcile_updates_only_changed_cells():
@@ -74,9 +90,9 @@ def test_reconcile_updates_only_changed_cells():
 
     result = reconciler.apply([changed], generation=(4,))
 
-    assert [(call[0], call[1], call[2], call[3].text) for call in table.calls] == [
-        ("update_cell", "task-123", "progress", "5/10"),
-        ("update_cell", "task-123", "rate", "0.5/s"),
+    assert [(call[0], call[1], call[2], call[3].text, call[4]) for call in table.calls] == [
+        ("update_cell", "task-123", "progress", "5/10", True),
+        ("update_cell", "task-123", "rate", "0.5/s", True),
     ]
     assert result.structure_changed is False
     assert result.changed_columns == frozenset({"progress", "rate"})
@@ -172,13 +188,19 @@ def test_textual_app_sorts_newest_first_and_toggles_header_direction():
             pid=100,
             registered_at=2000.0,
             started_at=2001.0,
+            group_id="long-group-name",
+            command="python scripts/sync_everything.py",
         )
         state = {"value": MonitorState(tasks=(older, newer), generation=1)}
         app = YgoTopApp(provider=lambda: state["value"])
         async with app.run_test() as pilot:
             table = app.query_one("#tasks", DataTable)
             mounted_id = id(table)
+            await pilot.pause()
             assert row_order(table) == ["newer", "older"]
+            assert column_width(table, "started") == 19
+            assert column_width(table, "group") >= len("long-group-name")
+            assert column_width(table, "command") >= len("python scripts/sync_everything.py")
 
             newest = make_task(
                 key="newest",
@@ -203,7 +225,16 @@ def test_textual_app_sorts_newest_first_and_toggles_header_direction():
             assert row_order(table) == ["newer", "newest", "older"]
 
             state["value"] = MonitorState(
-                tasks=(older, replace(newer, completed=5), newest),
+                tasks=(
+                    older,
+                    replace(
+                        newer,
+                        completed=5,
+                        group_id="an-even-longer-group-name",
+                        command="python scripts/sync_everything_with_history.py",
+                    ),
+                    newest,
+                ),
                 generation=3,
             )
             app.refresh_monitor()
@@ -211,5 +242,9 @@ def test_textual_app_sorts_newest_first_and_toggles_header_direction():
 
             assert id(app.query_one("#tasks", DataTable)) == mounted_id
             assert table.get_cell("newer", "progress").text == "5/10"
+            assert column_width(table, "group") >= len("an-even-longer-group-name")
+            assert column_width(table, "command") >= len(
+                "python scripts/sync_everything_with_history.py"
+            )
 
     asyncio.run(exercise())
