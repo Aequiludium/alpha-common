@@ -13,6 +13,7 @@ from typing import Callable, Protocol
 import psutil
 from loguru import logger
 
+from .history import HistoryRecord, HistoryStore, make_task_key
 from .model import GroupSnapshot, PoolSnapshot, ProcessSnapshot
 from .registry import RegistryEntry, RuntimeRegistry
 from .shared import SharedState
@@ -47,17 +48,25 @@ class PublisherProtocol(Protocol):
     def complete_pool(self, pool_id: str) -> None: ...
 
 
+class HistoryWriter(Protocol):
+    def append(self, record: HistoryRecord) -> None: ...
+
+
 @dataclass(slots=True)
 class _GroupState:
     id: str
     total: int
     registered_monotonic: float
+    registered_at: float
     status: str = "pending"
     started_monotonic: float | None = None
     finished_monotonic: float | None = None
+    started_at: float | None = None
+    finished_at: float | None = None
     completed: int = 0
     failed: int = 0
     last_error: str | None = None
+    archived: bool = False
 
 
 @dataclass(slots=True)
@@ -76,10 +85,14 @@ class TelemetryPublisher:
         transport: SharedState | object | None = None,
         registry: RuntimeRegistry | None = None,
         clock: Callable[[], float] = time.monotonic,
+        wall_clock: Callable[[], float] = time.time,
+        history: HistoryWriter | None = None,
         start_thread: bool = True,
         warn: Callable[[str], None] | None = None,
     ):
         self._clock = clock
+        self._wall_clock = wall_clock
+        self._history = history or HistoryStore()
         self._warn = warn or logger.warning
         self._lock = threading.RLock()
         self._stop = threading.Event()
@@ -88,6 +101,7 @@ class TelemetryPublisher:
         self._dirty = False
         self._disabled = False
         self._warned = False
+        self._history_warned = False
         self._closed = False
         self._last_write: float | None = None
         self._registry = registry
@@ -95,6 +109,9 @@ class TelemetryPublisher:
         self._transport = transport
         self._pid = os.getpid()
         self._process_started_at = psutil.Process(self._pid).create_time()
+        self._command = shlex.join(sys.argv)
+        self._cwd = str(Path.cwd())
+        self._log_path: str | None = None
 
         if self._transport is None:
             self._transport = SharedState.create()
@@ -104,9 +121,10 @@ class TelemetryPublisher:
                 process_started_at=self._process_started_at,
                 shared_memory_name=self._transport.name,
                 capacity=self._transport.capacity,
-                command=shlex.join(sys.argv),
-                cwd=str(Path.cwd()),
+                command=self._command,
+                cwd=self._cwd,
             )
+            self._log_path = self._entry.log_path
             self._registry.register(self._entry)
 
         if start_thread:
@@ -128,12 +146,18 @@ class TelemetryPublisher:
     ) -> None:
         def action() -> None:
             now = self._clock()
+            registered_at = self._wall_clock()
             self._pools[pool_id] = _PoolState(
                 id=pool_id,
                 backend=backend,
                 n_jobs=n_jobs,
                 groups={
-                    name: _GroupState(id=name, total=total, registered_monotonic=now)
+                    name: _GroupState(
+                        id=name,
+                        total=total,
+                        registered_monotonic=now,
+                        registered_at=registered_at,
+                    )
                     for name, total in groups.items()
                 },
             )
@@ -160,6 +184,14 @@ class TelemetryPublisher:
                 group.started_monotonic = started_monotonic
             if group.finished_monotonic is None or finished_monotonic > group.finished_monotonic:
                 group.finished_monotonic = finished_monotonic
+            if started_at is not None and (
+                group.started_at is None or started_at < group.started_at
+            ):
+                group.started_at = started_at
+            if finished_at is not None and (
+                group.finished_at is None or finished_at > group.finished_at
+            ):
+                group.finished_at = finished_at
             group.status = "running"
             group.completed += 1
             if failed:
@@ -167,6 +199,8 @@ class TelemetryPublisher:
                 group.last_error = error
             if group.completed >= group.total:
                 group.status = "error" if group.failed else "done"
+                if not group.archived:
+                    self._archive_group(self._pools[pool_id], group)
             self._dirty = True
             self._publish(force=False)
 
@@ -202,8 +236,8 @@ class TelemetryPublisher:
         return ProcessSnapshot(
             pid=self._pid,
             process_started_at=self._process_started_at,
-            command=shlex.join(sys.argv),
-            cwd=str(Path.cwd()),
+            command=self._command,
+            cwd=self._cwd,
             pools=tuple(
                 PoolSnapshot(
                     id=pool.id,
@@ -228,6 +262,11 @@ class TelemetryPublisher:
                                 if group.status in {"done", "error"}
                                 else None
                             ),
+                            registered_at=group.registered_at,
+                            started_at=group.started_at,
+                            finished_at=(
+                                group.finished_at if group.status in {"done", "error"} else None
+                            ),
                         )
                         for group in pool.groups.values()
                     ),
@@ -235,6 +274,48 @@ class TelemetryPublisher:
                 for pool in self._pools.values()
             ),
         )
+
+    def _archive_group(self, pool: _PoolState, group: _GroupState) -> None:
+        if (
+            group.started_monotonic is None
+            or group.finished_monotonic is None
+            or group.started_at is None
+            or group.finished_at is None
+        ):
+            return
+        elapsed = max(0.0, group.finished_monotonic - group.started_monotonic)
+        record = HistoryRecord(
+            task_key=make_task_key(
+                self._pid,
+                self._process_started_at,
+                pool.id,
+                group.id,
+            ),
+            pid=self._pid,
+            process_started_at=self._process_started_at,
+            pool_id=pool.id,
+            group_id=group.id,
+            command=self._command,
+            status=group.status,
+            total=group.total,
+            completed=group.completed,
+            failed=group.failed,
+            last_error=group.last_error,
+            log_path=self._log_path,
+            registered_at=group.registered_at,
+            started_at=group.started_at,
+            finished_at=group.finished_at,
+            elapsed_seconds=elapsed,
+            rate=group.completed / elapsed if elapsed else 0.0,
+        )
+        try:
+            self._history.append(record)
+        except Exception as exc:
+            if not self._history_warned:
+                self._history_warned = True
+                self._warn(f"ygo history unavailable: {exc}")
+        else:
+            group.archived = True
 
     def _safe(self, action: Callable[[], None]) -> None:
         with self._lock:
