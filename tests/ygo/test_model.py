@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -26,6 +27,9 @@ def test_process_snapshot_round_trip():
                         failed=1,
                         started_monotonic=20.0,
                         finished_monotonic=25.0,
+                        registered_at=1000.0,
+                        started_at=1001.0,
+                        finished_at=1006.0,
                         last_error="timeout",
                     ),
                 ),
@@ -67,6 +71,58 @@ def test_snapshot_accepts_group_without_finish_timestamp():
     payload = json.loads(snapshot.to_json())
     del payload["pools"][0]["groups"][0]["finished_monotonic"]
     assert ProcessSnapshot.from_json(json.dumps(payload)) == snapshot
+
+
+def test_snapshot_accepts_group_without_wall_clock_timestamps():
+    group = GroupSnapshot(
+        id="quote",
+        status="done",
+        total=1,
+        completed=1,
+        failed=0,
+        started_monotonic=20.0,
+        finished_monotonic=25.0,
+        registered_at=1000.0,
+        started_at=1001.0,
+        finished_at=1006.0,
+    )
+    snapshot = ProcessSnapshot(
+        pid=123,
+        process_started_at=1000.5,
+        command="python sync.py",
+        cwd="/tmp/work",
+        pools=(
+            PoolSnapshot(
+                id="pool-1",
+                backend="threading",
+                n_jobs=1,
+                status="done",
+                groups=(group,),
+            ),
+        ),
+    )
+    payload = json.loads(snapshot.to_json())
+    for field in ("registered_at", "started_at", "finished_at"):
+        del payload["pools"][0]["groups"][0][field]
+
+    expected = replace(
+        snapshot,
+        pools=(
+            replace(
+                snapshot.pools[0],
+                groups=(
+                    replace(
+                        group,
+                        registered_at=None,
+                        started_at=None,
+                        finished_at=None,
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    assert ProcessSnapshot.from_json(json.dumps(payload)) == expected
 
 
 def test_snapshot_rejects_incompatible_schema():

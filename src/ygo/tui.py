@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -8,7 +9,7 @@ from typing import Any
 from textual.app import App, ComposeResult
 from textual.widgets import DataTable, Footer, Header
 
-from .monitor import LiveProcess, read_live_snapshots
+from .monitor import MonitoredTask, MonitorState, read_monitor_state
 
 COLUMNS = (
     ("pid", "PID"),
@@ -17,74 +18,123 @@ COLUMNS = (
     ("rate", "RATE"),
     ("failed", "FAIL"),
     ("elapsed", "ELAPSED"),
+    ("started", "STARTED"),
     ("group", "GROUP"),
     ("command", "COMMAND"),
 )
+
+SortValue = int | float | str
+
+
+@dataclass(frozen=True, slots=True)
+class TableCell:
+    text: str
+    sort_value: SortValue
+
+    def __rich__(self) -> str:
+        return self.text
+
+    def __str__(self) -> str:
+        return self.text
 
 
 @dataclass(frozen=True, slots=True)
 class MonitorRow:
     key: str
-    cells: dict[str, str]
+    cells: dict[str, TableCell]
     error: str | None = None
     log_path: str | None = None
 
 
-def rows_from_processes(
-    processes: Iterable[LiveProcess],
+@dataclass(frozen=True, slots=True)
+class ReconcileResult:
+    structure_changed: bool
+    changed_columns: frozenset[str]
+
+
+def row_from_task(
+    task: MonitoredTask,
     *,
     now: float | None = None,
-) -> list[MonitorRow]:
+) -> MonitorRow:
     current = time.monotonic() if now is None else now
-    rows: list[MonitorRow] = []
-    for process in processes:
-        for pool in process.snapshot.pools:
-            for group in pool.groups:
-                if group.status == "pending" or (
-                    group.status in {"done", "error"} and group.finished_monotonic is None
-                ):
-                    rate_text = "--"
-                    elapsed_text = "--"
-                else:
-                    end = group.finished_monotonic if group.status in {"done", "error"} else current
-                    elapsed = max(0.0, end - group.started_monotonic)
-                    rate = group.completed / elapsed if elapsed else 0.0
-                    rate_text = f"{rate:.1f}/s"
-                    elapsed_text = _format_duration(elapsed)
-                rows.append(
-                    MonitorRow(
-                        key=f"{process.snapshot.pid}:{pool.id}:{group.id}",
-                        cells={
-                            "pid": str(process.snapshot.pid),
-                            "status": group.status,
-                            "progress": f"{group.completed}/{group.total}",
-                            "rate": rate_text,
-                            "failed": str(group.failed),
-                            "elapsed": elapsed_text,
-                            "group": group.id,
-                            "command": process.entry.command,
-                        },
-                        error=group.last_error,
-                        log_path=process.entry.log_path,
-                    )
-                )
-    return rows
+    elapsed, rate = _task_metrics(task, current)
+    started_text = (
+        "--"
+        if task.started_at is None
+        else datetime.datetime.fromtimestamp(task.started_at).strftime("%Y-%m-%d %H:%M:%S")
+    )
+    progress = task.completed / task.total if task.total else 0.0
+    order_time = task.started_at if task.started_at is not None else task.registered_at
+    return MonitorRow(
+        key=task.key,
+        cells={
+            "pid": TableCell(str(task.pid), task.pid),
+            "status": TableCell(task.status, task.status.casefold()),
+            "progress": TableCell(
+                f"{task.completed}/{task.total}",
+                progress,
+            ),
+            "rate": TableCell(
+                "--" if rate is None else f"{rate:.1f}/s",
+                -1.0 if rate is None else rate,
+            ),
+            "failed": TableCell(str(task.failed), task.failed),
+            "elapsed": TableCell(
+                "--" if elapsed is None else _format_duration(elapsed),
+                -1.0 if elapsed is None else elapsed,
+            ),
+            "started": TableCell(started_text, order_time),
+            "group": TableCell(task.group_id, task.group_id.casefold()),
+            "command": TableCell(task.command, task.command.casefold()),
+        },
+        error=task.error,
+        log_path=task.log_path,
+    )
+
+
+def _task_metrics(
+    task: MonitoredTask,
+    current: float,
+) -> tuple[float | None, float | None]:
+    if task.status == "pending":
+        return None, None
+    if task.elapsed_seconds is not None:
+        return task.elapsed_seconds, task.rate
+    if task.started_monotonic is None:
+        return None, None
+    if task.status in {"done", "error"}:
+        if task.finished_monotonic is None:
+            return None, None
+        end = task.finished_monotonic
+    else:
+        end = current
+    elapsed = max(0.0, end - task.started_monotonic)
+    return elapsed, task.completed / elapsed if elapsed else 0.0
 
 
 class TableReconciler:
     def __init__(self, table: Any):
         self.table = table
-        self._cells: dict[str, dict[str, str]] = {}
+        self._cells: dict[str, dict[str, TableCell]] = {}
         self._generation: object = None
 
-    def apply(self, rows: Iterable[MonitorRow], *, generation: object) -> None:
+    def apply(
+        self,
+        rows: Iterable[MonitorRow],
+        *,
+        generation: object,
+    ) -> ReconcileResult:
         if generation == self._generation:
-            return
+            return ReconcileResult(False, frozenset())
         next_rows = {row.key: row for row in rows}
+        structure_changed = False
+        changed_columns: set[str] = set()
 
         for key in self._cells.keys() - next_rows.keys():
             self.table.remove_row(key)
             del self._cells[key]
+            structure_changed = True
 
         for key, row in next_rows.items():
             previous = self._cells.get(key)
@@ -94,13 +144,19 @@ class TableReconciler:
                     key=key,
                 )
                 self._cells[key] = dict(row.cells)
+                structure_changed = True
                 continue
             for column, value in row.cells.items():
                 if previous.get(column) != value:
                     self.table.update_cell(key, column, value)
                     previous[column] = value
+                    changed_columns.add(column)
 
         self._generation = generation
+        return ReconcileResult(
+            structure_changed,
+            frozenset(changed_columns),
+        )
 
 
 class YgoTopApp(App[None]):
@@ -120,12 +176,14 @@ class YgoTopApp(App[None]):
     def __init__(
         self,
         *,
-        provider: Callable[[], list[LiveProcess]] = read_live_snapshots,
+        provider: Callable[[], MonitorState] = read_monitor_state,
     ):
         super().__init__()
         self._provider = provider
         self._reconciler: TableReconciler | None = None
         self._rows: dict[str, MonitorRow] = {}
+        self._sort_column = "started"
+        self._sort_reverse = True
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -144,15 +202,34 @@ class YgoTopApp(App[None]):
         if self._reconciler is None:
             return
         now = time.monotonic()
-        processes = self._provider()
-        rows = rows_from_processes(processes, now=now)
+        state = self._provider()
+        rows = [row_from_task(task, now=now) for task in state.tasks]
         self._rows = {row.key: row for row in rows}
-        generation = (
-            tuple(sorted((item.snapshot.pid, item.generation) for item in processes)),
-            int(now * 2),
-        )
-        self._reconciler.apply(rows, generation=generation)
+        generation = (state.generation, int(now * 2))
+        result = self._reconciler.apply(rows, generation=generation)
+        if result.structure_changed or self._sort_column in result.changed_columns:
+            self._sort_table()
         self.sub_title = f"{len(rows)} groups · 0.2s"
+
+    def on_data_table_header_selected(
+        self,
+        event: DataTable.HeaderSelected,
+    ) -> None:
+        selected = str(event.column_key.value)
+        if selected == self._sort_column:
+            self._sort_reverse = not self._sort_reverse
+        else:
+            self._sort_column = selected
+            self._sort_reverse = False
+        self._sort_table()
+
+    def _sort_table(self) -> None:
+        table = self.query_one("#tasks", DataTable)
+        table.sort(
+            self._sort_column,
+            key=lambda cell: cell.sort_value,
+            reverse=self._sort_reverse,
+        )
 
     def action_refresh(self) -> None:
         if self._reconciler is not None:

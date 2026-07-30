@@ -4,6 +4,7 @@ import sys
 import time
 
 from ygo.monitor import read_live_snapshots
+from ygo.telemetry.history import HistoryStore
 from ygo.telemetry.registry import RuntimeRegistry
 
 PRODUCER = """
@@ -43,11 +44,13 @@ def wait_until(predicate, *, timeout: float = 5.0):
 
 def test_subprocess_pool_is_discoverable_and_cleans_up(tmp_path):
     runtime_dir = tmp_path / "runtime"
+    history_dir = tmp_path / "history"
     registry = RuntimeRegistry(runtime_dir)
     release = tmp_path / "release"
     exit_file = tmp_path / "exit"
     env = dict(os.environ)
     env["YGO_RUNTIME_DIR"] = str(runtime_dir)
+    env["YGO_HISTORY_DIR"] = str(history_dir)
     process = subprocess.Popen(
         [sys.executable, "-c", PRODUCER, str(release), str(exit_file)],
         env=env,
@@ -83,6 +86,10 @@ def test_subprocess_pool_is_discoverable_and_cleans_up(tmp_path):
         stdout, stderr = process.communicate(timeout=5)
         assert process.returncode == 0, f"{stdout}\n{stderr}"
         wait_until(lambda: not registry.entries())
+        history = HistoryStore(history_dir).recent()
+        assert len(history) == 1
+        assert history[0].group_id == "quote"
+        assert history[0].status == "done"
     finally:
         exit_file.touch()
         if process.poll() is None:
