@@ -17,6 +17,9 @@ class GroupSnapshot:
     started_monotonic: float
     last_error: str | None = None
     finished_monotonic: float | None = None
+    registered_at: float | None = None
+    started_at: float | None = None
+    finished_at: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,5 +102,12 @@ def _group_from_dict(payload: Any) -> GroupSnapshot:
         failed=int(payload["failed"]),
         started_monotonic=float(payload["started_monotonic"]),
         last_error=None if last_error is None else str(last_error),
-        finished_monotonic=(None if finished_monotonic is None else float(finished_monotonic)),
+        finished_monotonic=_optional_float(finished_monotonic),
+        registered_at=_optional_float(payload.get("registered_at")),
+        started_at=_optional_float(payload.get("started_at")),
+        finished_at=_optional_float(payload.get("finished_at")),
     )
+
+
+def _optional_float(value: object) -> float | None:
+    return None if value is None else float(value)

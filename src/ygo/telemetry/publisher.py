@@ -40,6 +40,8 @@ class PublisherProtocol(Protocol):
         error: str | None = None,
         started_monotonic: float,
         finished_monotonic: float,
+        started_at: float | None = None,
+        finished_at: float | None = None,
     ) -> None: ...
 
     def complete_pool(self, pool_id: str) -> None: ...
@@ -149,6 +151,8 @@ class TelemetryPublisher:
         error: str | None = None,
         started_monotonic: float,
         finished_monotonic: float,
+        started_at: float | None = None,
+        finished_at: float | None = None,
     ) -> None:
         def action() -> None:
             group = self._pools[pool_id].groups[group_id]

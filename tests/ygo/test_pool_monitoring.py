@@ -21,9 +21,21 @@ class FakePublisher:
         error=None,
         started_monotonic,
         finished_monotonic,
+        started_at,
+        finished_at,
     ):
         assert pool_id == self.pool_id
-        self.completions.append((group_id, failed, error, started_monotonic, finished_monotonic))
+        self.completions.append(
+            (
+                group_id,
+                failed,
+                error,
+                started_monotonic,
+                finished_monotonic,
+                started_at,
+                finished_at,
+            )
+        )
 
     def complete_pool(self, pool_id):
         assert pool_id == self.pool_id
@@ -43,11 +55,22 @@ def test_pool_publishes_group_progress():
 
     assert pool.do() == [1, 2]
     assert publisher.registered_groups == {"quote": 2}
-    assert [(group, failed, error) for group, failed, error, _, _ in publisher.completions] == [
+    assert [(group, failed, error) for group, failed, error, *_ in publisher.completions] == [
         ("quote", False, None),
         ("quote", False, None),
     ]
-    assert all(start <= finish for _, _, _, start, finish in publisher.completions)
+    assert all(
+        started_monotonic <= finished_monotonic and started_at <= finished_at
+        for (
+            _,
+            _,
+            _,
+            started_monotonic,
+            finished_monotonic,
+            started_at,
+            finished_at,
+        ) in publisher.completions
+    )
     assert publisher.completed is True
 
 
@@ -71,6 +94,6 @@ def test_pool_publishes_failure_summary():
     pool.submit(fail, job_name="broken")()
 
     assert pool.do() == [None]
-    assert [(group, failed, error) for group, failed, error, _, _ in publisher.completions] == [
+    assert [(group, failed, error) for group, failed, error, *_ in publisher.completions] == [
         ("broken", True, "ValueError: boom")
     ]

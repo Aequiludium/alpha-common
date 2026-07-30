@@ -26,7 +26,7 @@ T = TypeVar("T")
 def run_job(
     job: DelayedFunction,
     task_name: str,
-) -> tuple[str, Any, bool, str | None, float, float]:
+) -> tuple[str, Any, bool, str | None, float, float, float, float]:
     """
     执行单个延迟任务。
 
@@ -44,14 +44,37 @@ def run_job(
         >>> result
         ('test_task', 10, False, None, ...)
     """
+    started_at = time.time()
     started_monotonic = time.monotonic()
     try:
         result = job()
-        return task_name, result, False, None, started_monotonic, time.monotonic()
+        finished_monotonic = time.monotonic()
+        finished_at = time.time()
+        return (
+            task_name,
+            result,
+            False,
+            None,
+            started_monotonic,
+            finished_monotonic,
+            started_at,
+            finished_at,
+        )
     except Exception as e:
+        finished_monotonic = time.monotonic()
+        finished_at = time.time()
         error = f"{type(e).__name__}: {e}"
         logger.error(f"Failed to run job: {task_name}: {error}")
-        return task_name, None, True, error, started_monotonic, time.monotonic()
+        return (
+            task_name,
+            None,
+            True,
+            error,
+            started_monotonic,
+            finished_monotonic,
+            started_at,
+            finished_at,
+        )
 
 
 def multi_task_name(
@@ -59,7 +82,9 @@ def multi_task_name(
     job_num: int,
     backend: str,
     show_progress: bool,
-    completion_callback: Callable[[str, bool, str | None, float, float], None] | None = None,
+    completion_callback: (
+        Callable[[str, bool, str | None, float, float, float, float], None] | None
+    ) = None,
 ) -> list[Any] | dict[str, list[Any]]:
     """
     并行执行多个任务。
@@ -95,9 +120,16 @@ def multi_task_name(
     results: dict[str, list[Any]] = {}
     with ProgressManager(show_progress=show_progress) as progress_mgr:
         progress_id = progress_mgr.create_task("ygo", total=len(job_lst))
-        for name, result, is_error, error, started_monotonic, finished_monotonic in _parallel(
-            job_lst
-        ):
+        for (
+            name,
+            result,
+            is_error,
+            error,
+            started_monotonic,
+            finished_monotonic,
+            started_at,
+            finished_at,
+        ) in _parallel(job_lst):
             if is_error:
                 progress_mgr.mark_failure(progress_id)
             progress_mgr.update(progress_id)
@@ -108,6 +140,8 @@ def multi_task_name(
                     error,
                     started_monotonic,
                     finished_monotonic,
+                    started_at,
+                    finished_at,
                 )
             results.setdefault(name, []).append(result)
 
@@ -271,7 +305,7 @@ class Pool:
                 job_num,
                 self.backend,
                 self.show_progress,
-                completion_callback=lambda name, failed, error, started_monotonic, finished_monotonic: (
+                completion_callback=lambda name, failed, error, started_monotonic, finished_monotonic, started_at, finished_at: (
                     self._publisher.record_completion(
                         self._pool_id,
                         name,
@@ -279,6 +313,8 @@ class Pool:
                         error=error,
                         started_monotonic=started_monotonic,
                         finished_monotonic=finished_monotonic,
+                        started_at=started_at,
+                        finished_at=finished_at,
                     )
                 ),
             )
